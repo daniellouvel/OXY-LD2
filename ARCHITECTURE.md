@@ -14,7 +14,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | `calibration` | État de calibration (air, cellule), persistance, détection de vieillissement |
 | `stability` | Détection de stabilité (critère de pente `\|ΔV/Δt\| < ε`, cf. §2) |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
-| `display` | Rendu écran TFT (ST7789) |
+| `display` | Rendu écran TFT (ST7789) — valeur O2 **clignotante tant que `stability.is_stable()` est faux, fixe une fois vrai** (cf. §2) |
 | `storage` | Persistance (calibration, historique, réglages) |
 | `rtc_clock` | Horodatage RTC |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
@@ -45,7 +45,9 @@ Bugs déjà rencontrés sur OXY-LD à traiter structurellement plutôt qu'au cas
 - **Choix de pin invalidé a posteriori** (LED sur une strapping pin, déplacée deux fois) → la table de brochage vit à un seul endroit ([HARDWARE.md](HARDWARE.md)), vérifiée contre la documentation strapping-pin de l'ESP32-S3 *avant* implémentation, pas après un premier essai raté.
 - **Tests unitaires PlatformIO (Unity, environnement `native`)** pour toute la logique pure : calcul MOD, conversion tension→%O2, arrondi, compensation thermique, logique de calibration. Ces modules ne touchent pas au matériel — testables sans carte branchée.
 - **Watchdog matériel** activé, pour repartir proprement d'un état cohérent en cas de blocage plutôt que de rester figé.
-- **Détection de stabilité par critère de pente** (`stability`, non implémenté) : au lieu du seul seuil min/max sur fenêtre glissante d'OXY-LD (15 lectures, 0.1 %), critère `|ΔV/Δt| < ε` — le taux de variation du signal s'approche de zéro quand la réaction chimique de la cellule est terminée, ce qui colle mieux à la réalité physique qu'un simple écart max−min qui peut s'annuler par hasard sur du bruit. Valeurs de départ proposées (à calibrer sur la vraie cellule) : Δt = 1 s, ε = 0.02 %O2/s, doublé d'une durée minimale de 60 s depuis le dernier changement de gaz/calibration pour éviter qu'un plateau transitoire précoce soit pris pour une vraie stabilisation.
+- **Détection de stabilité par critère de pente** (`stability`, non implémenté) : au lieu du seul seuil min/max sur fenêtre glissante d'OXY-LD (15 lectures, 0.1 %), critère de pente lissée (EMA) `|d(%O2)/dt| < ε` — le taux de variation du signal s'approche de zéro quand la réaction chimique de la cellule est terminée, ce qui colle mieux à la réalité physique qu'un simple écart max−min qui peut s'annuler par hasard sur du bruit. Deux durées cumulatives : `min_settle_ms` (plancher dur depuis le dernier changement de gaz/calibration, avant même d'envisager la stabilité) et `sustained_ms` (la pente doit rester sous ε en continu avant de déclarer stable, anti-rebond contre un creux de bruit isolé).
+  - Valeurs de départ initiales (60 s / 5 s) revues à la baisse après retour d'expérience : un analyseur Nitrox du commerce stabilise typiquement en **5-15 s**. Nouvelles valeurs de départ : `min_settle_ms = 5000`, `sustained_ms = 3000` (~8 s dans le meilleur cas, cohérent avec le bas de la fourchette observée). `ε` et `α` (lissage EMA) inchangés faute de donnée pour les ajuster. **Toujours non calibré sur la vraie cellule** — le retour d'expérience porte sur un analyseur commercial, pas sur cette cellule galvanique dans ce boîtier précis (flux d'air actif ou diffusion passive : à déterminer).
+  - **Retour UI attendu (non implémenté)** : la valeur O2 affichée doit **clignoter** tant que `stability.is_stable()` est faux, et devenir **fixe** dès qu'il passe vrai — signal visuel direct que la mesure est validée. C'est une responsabilité de `display` (qui lit l'état de `stability` en entrée), pas de `stability` elle-même, qui reste une logique pure sans notion de rendu ni de rythme de clignotement. Reste à trancher à l'implémentation de `display` : période de clignotement, et si le comportement doit aussi se refléter sur l'étiquette imprimée ou seulement à l'écran.
 
 ## 3. Précision de mesure
 
@@ -63,6 +65,6 @@ La chaîne de mesure O2 est le cœur du projet — elle mérite plus d'attention
 - Filtrage exact du signal ADS1115 (moyenne vs médiane, taille de fenêtre).
 - Format de persistance (Preferences/NVS natif ESP32 vs structure EEPROM versionnée maison).
 - Portée du firmware de test/diagnostic (OXY-LD garde des `.cpp` de diagnostic séparés dans `src/` — à reproduire ou remplacer par les tests unitaires `test/`).
-- Valeurs finales de Δt/ε/durée minimale pour `stability` — les valeurs de départ ci-dessus n'ont pas été mesurées sur une vraie cellule.
+- Valeurs finales de `ε`/`α`/`min_settle_ms`/`sustained_ms` pour `stability` — revues une fois sur retour d'expérience (analyseur du commerce), mais toujours pas mesurées sur la vraie cellule de ce projet.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.
