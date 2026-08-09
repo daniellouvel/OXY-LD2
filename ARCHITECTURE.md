@@ -10,11 +10,12 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 
 | Module (prévu) | Responsabilité |
 |---|---|
-| `o2_sensor` ✅ | Conversion tension → %O2, compensation thermique, filtrage — **partie pure implémentée**, voir ci-dessous. Lecture ADS1115 réelle reportée (module matériel séparé, à écrire au câblage) |
+| `o2_sensor` ✅ | Conversion tension → %O2, compensation thermique, filtrage — **implémenté**, voir ci-dessous |
+| `ads1115_reader` ✅ | Lecture différentielle ADS1115 réelle — **implémenté et vérifié sur la carte**, voir ci-dessous |
 | `calibration` ✅ | État de calibration (air, cellule optionnellement thermique), détection de vieillissement — **implémenté**, voir ci-dessous. Persistance flash déléguée à `storage` |
 | `stability` ✅ | Détection de stabilité par pente lissée — **implémenté**, voir ci-dessous |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
-| `display` | Rendu écran TFT (ST7789) — valeur O2 **clignotante tant que `stability.is_stable()` est faux, fixe une fois vrai** (cf. §2) |
+| `display` ✅ | Rendu écran TFT (ST7789) — **implémenté, compile et flashe**, voir ci-dessous. Rendu visuel non confirmé (pas d'accès visuel à la carte) |
 | `storage` ✅ | Sérialisation versionnée de la calibration — **partiellement implémenté**, voir ci-dessous. Écriture flash réelle (NVS) reportée. Historique complet et réglages pas encore couverts |
 | `rtc_clock` | Horodatage RTC |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
@@ -63,9 +64,28 @@ La chaîne de mesure O2 est le cœur du projet — elle mérite plus d'attention
 
 `voltage_to_o2_percent(v_measured_mv, v_calibration_mv, o2_reference_percent=20.9)` : conversion linéaire, `NAN` si non calibré (`v_calibration_mv ≤ 0`). Ne possède pas l'état de calibration — fourni par l'appelant (module `calibration`).
 
-La lecture ADS1115 réelle (gain `GAIN_SIXTEEN`, `readADC_Differential_0_1()`) est **volontairement reportée** à un module matériel séparé, pas encore écrit. Elle ne peut pas vivre dans `lib/o2_sensor/` : PlatformIO compile tout le contenu d'un dossier `lib/` dès qu'un seul fichier est inclus, donc mélanger code pur et code dépendant d'`Adafruit_ADS1X15`/`Arduino.h` dans le même dossier casserait `pio test -e native`. Écrite au moment du câblage, quand elle sera vérifiable sur le vrai matériel.
+La lecture ADS1115 réelle (gain `GAIN_SIXTEEN`, `readADC_Differential_0_1()`) vit dans `lib/ads1115_reader/` — pas dans `lib/o2_sensor/` : PlatformIO compile tout le contenu d'un dossier `lib/` dès qu'un seul fichier est inclus, donc mélanger code pur et code dépendant d'`Adafruit_ADS1X15`/`Arduino.h` dans le même dossier casserait `pio test -e native`.
 
 17 tests unitaires (`test/test_o2_sensor`), tous passés du premier coup.
+
+### `ads1115_reader` — implémenté et **vérifié sur la vraie carte**
+
+Signatures API confirmées en lisant les vraies bibliothèques après `pio run -e esp32s3` (`Adafruit_ADS1X15 @ 2.6.2`, dans `.pio/libdeps/esp32s3/`) plutôt qu'écrites de mémoire — `begin()`, `setGain(GAIN_SIXTEEN)`, `readADC_Differential_0_1()`, `computeVolts()` (retourne des volts, converti en mV ici).
+
+**Flashé sur la carte réelle (COM6) et vérifié par lecture série** (nuit du 2026-08-09, ESP32-S3 QFN56 rev v0.2, PSRAM embarquée 2MB confirmée par `esptool` — cohérent avec N16R2) :
+```
+v_mv=8.141 fo2=20.92 o2=21 mod=56 slope=0.1709 stable=0 cal_v=8.133
+v_mv=8.125 fo2=20.88 o2=21 mod=56 slope=-0.2678 stable=0 cal_v=8.133
+```
+Tension cellule ~8.13 mV (plausible, légèrement sous la fourchette nominale ~9-13 mV d'OXY-LD — pas alarmant, variabilité normale entre cellules), valeur qui **varie réellement** d'une lecture à l'autre (8.125–8.148 mV, pas une valeur figée). `mod=56` pour O2=21%/ppO2=1.4 correspond **exactement** à la valeur validée contre la table papier du club plus tôt dans cette session — première confirmation que toute la chaîne (ADS1115 → conversion → arrondi → table MOD) produit un résultat cohérent de bout en bout sur du vrai matériel, pas seulement en tests unitaires.
+
+**Non vérifié** : je n'ai pas pu physiquement souffler/couvrir la cellule pour confirmer que la valeur réagit à un vrai changement de gaz (pas d'accès physique à la carte) — seule la variation de bruit normale est confirmée, pas la réponse à un stimulus.
+
+### `display` — implémenté, compile et flashe, **rendu visuel non confirmé**
+
+Signatures API vérifiées dans les vraies bibliothèques (`Adafruit ST7735 and ST7789 Library @ 1.11.0`, `Adafruit GFX Library @ 1.12.6`) : `Adafruit_ST7789(SPIClass*, cs, dc, rst)` (constructeur SPI matériel), `init(240,320)`, `invertDisplay(true)`, `setRotation(1)`, `sendCommand(ST77XX_MADCTL, &madctl, 1)` avec `ST77XX_MADCTL_MV` pour le miroir — toutes les constantes existent bien dans cette version de la bibliothèque, pas supposées. `SPI.begin(sck=12, miso=-1, mosi=11, cs=10)` reprend exactement la note de `HARDWARE.md`/OXY-LD sur le MISO non câblé.
+
+**Compile et flashe sans erreur.** Le firmware tourne (logs série confirmés, cf. `ads1115_reader` ci-dessus), donc les appels d'affichage s'exécutent sans planter. **Ce qui n'est PAS vérifié** : je n'ai aucun accès visuel à l'écran physique — je ne peux pas confirmer que le texte est lisible, bien positionné, pas inversé/mirroir malgré le `MADCTL` forcé. Positions/tailles de police jamais calibrées à l'oeil. **À vérifier par vous au réveil : est-ce que l'écran affiche quelque chose de lisible ?**
 
 ### `calibration` — implémenté
 
@@ -109,6 +129,16 @@ L'écriture flash réelle (`Preferences.putBytes()`/`getBytes()`) n'est pas incl
 
 6 tests unitaires (`test/test_buttons`) : cycles indépendants (le chrono d'un appui ne doit pas hériter du timing du précédent), non-répétition du `LongPress` tant que maintenu, rollover `millis()`.
 
+### `src/main.cpp` — première intégration, **vérifiée en fonctionnement réel**
+
+Boucle : `ads1115_reader` → `GlitchFilter` → `voltage_to_o2_percent` → `StabilityTracker` (horloge `millis()`, RTC pas câblé) → `mod_lookup` → `display`/`led_status`. ppO2 fixe à 1.4 (pas de bouton câblé). Pas de compensation thermique (DS18B20 pas câblé).
+
+**Simplification assumée pour ce premier smoke-test, PAS la vraie fonctionnalité** : auto-calibration naïve sur la toute première lecture valide au démarrage (`calibration.calibrate(filtered_mv, now)` si `!is_calibrated()`), pour obtenir un %O2 exploitable sans bouton pour déclencher une vraie calibration. Contrairement à l'auto-calibration d'OXY-LD (après arrêt prolongé, avec vérification de stabilité), ceci calibre sur une lecture unique non vérifiée stable — à remplacer par un vrai déclenchement (bouton) dès que câblé.
+
+**Bug trouvé et corrigé avant tout flash** : une coquille `# vrai declenchement...` (dièse au lieu de `//`) dans un commentaire aurait été interprétée comme une directive préprocesseur invalide — repérée et corrigée avant la première compilation.
+
+**Vérifié par log série réel** (cf. `ads1115_reader` ci-dessus pour les valeurs) : le pipeline complet tourne sans planter, produit des valeurs plausibles et cohérentes avec la table MOD validée. Diagnostic série ajouté spécifiquement cette nuit (`Serial.printf` 1×/s dans `loop()`) pour ne pas se contenter d'une absence d'erreur comme preuve de fonctionnement.
+
 ---
 
 ## Ce qui n'est pas encore tranché
@@ -116,10 +146,13 @@ L'écriture flash réelle (`Preferences.putBytes()`/`getBytes()`) n'est pas incl
 - Portée du firmware de test/diagnostic (OXY-LD garde des `.cpp` de diagnostic séparés dans `src/` — à reproduire ou remplacer par les tests unitaires `test/`).
 - Valeurs finales de `ε`/`α`/`min_settle_ms`/`sustained_ms` pour `stability` — revues une fois sur retour d'expérience (analyseur du commerce), mais toujours pas mesurées sur la vraie cellule de ce projet.
 - Coefficient de compensation thermique (`coefficient_percent_per_c`) — à sourcer depuis la fiche technique de la cellule ou une mesure empirique.
-- Driver ADS1115 réel (lecture différentielle matérielle) — à écrire au câblage, dans un module séparé de `lib/o2_sensor/`.
 - Constantes `calibration` : plage de tension plausible à l'air, seuil de remplacement cellule, seuil de dérive, capacité de l'historique (10 par défaut, arbitraire) — aucune sourcée depuis une fiche technique vérifiée.
 - Écriture flash réelle de `storage` (`Preferences.putBytes`/`getBytes`) — à écrire au câblage.
 - Persistance de l'historique complet de calibration (pas seulement le dernier point) — nécessite d'étendre `CalibrationTracker`.
 - Persistance de l'historique d'analyses et des réglages (ppO2 verrouillée, nom de station...) — pas encore couverte par `storage`.
+- **Rendu visuel réel de `display`** — compile et flashe, mais personne n'a regardé l'écran physique. À confirmer au réveil.
+- **Auto-calibration naïve de `main.cpp`** (première lecture = référence) à remplacer par un vrai déclenchement (bouton `ButtonTracker`, déjà écrit) dès que les TTP223 sont câblés.
+- **Intégration RTC/DS18B20/boutons dans `main.cpp`** — hors scope de cette nuit car non câblés. `RTC_PCF8563.cpp` confirmé présent dans `RTClib @ 2.1.4` (compilé avec succès cette nuit) — l'incertitude notée précédemment sur le support PCF8563 de cette bibliothèque est levée.
+- Positions/tailles de police TSPL (`printer`) et TFT (`display`) — jamais vérifiées visuellement, points de départ à ajuster.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.

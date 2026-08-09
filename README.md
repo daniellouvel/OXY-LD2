@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Huit modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor` — partie pure, `calibration`, `storage` — sérialisation calibration seule, `printer`, `led_status`, `buttons`). Les modules matériels (ADS1115, TFT) sont en cours d'intégration réelle sur la carte câblée.
+> **Statut : en cours.** Huit modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage` — sérialisation calibration seule, `printer`, `led_status`, `buttons`). Première intégration matérielle réelle flashée et vérifiée par log série sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT) — voir ARCHITECTURE.md pour le détail précis de ce qui est vérifié vs pas (l'affichage visuel notamment n'a pas encore été confirmé à l'oeil).
 
 ---
 
@@ -32,7 +32,9 @@ OXY-LD2/
 │   ├── storage/           Sérialisation versionnée de la calibration (checksum, détection flash vierge)
 │   ├── printer/           Génération étiquette TSPL
 │   ├── led_status/        Table état→couleur/clignotement LED
-│   └── buttons/           Détection appui court/long
+│   ├── buttons/           Détection appui court/long
+│   ├── ads1115_reader/    Lecture ADS1115 réelle (matériel, vérifié sur carte)
+│   └── display/           Rendu écran TFT ST7789 (matériel, compile+flashe, rendu visuel non confirmé)
 ├── test/                 Tests unitaires PlatformIO (pio test -e native)
 │   ├── test_mod_calc/
 │   ├── test_stability/
@@ -59,6 +61,16 @@ pio test -e native
 ```
 
 Nécessite un compilateur hôte (g++/gcc) — pas installé par défaut sur Windows. Si absent : `scoop install gcc` (pas de droits admin requis).
+
+## Compiler et flasher (matériel réel)
+
+```
+pio run -e esp32s3                              # compiler
+pio run -e esp32s3 -t upload --upload-port COMx  # flasher
+pio device monitor -p COMx -b 115200             # lire les logs serie
+```
+
+Premier build : télécharge les vraies bibliothèques (`Adafruit ADS1X15`, `Adafruit GFX`/`ST7735-ST7789`, `RTClib`, etc.) dans `.pio/libdeps/esp32s3/`. La carte utilisée cette nuit apparaissait sous Windows comme `COM6` (USB JTAG/serial natif ESP32-S3).
 
 ## Avertissements
 
