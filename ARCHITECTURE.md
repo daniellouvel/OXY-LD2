@@ -11,7 +11,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | Module (prévu) | Responsabilité |
 |---|---|
 | `o2_sensor` ✅ | Conversion tension → %O2, compensation thermique, filtrage — **partie pure implémentée**, voir ci-dessous. Lecture ADS1115 réelle reportée (module matériel séparé, à écrire au câblage) |
-| `calibration` | État de calibration (air, cellule), persistance, détection de vieillissement |
+| `calibration` ✅ | État de calibration (air, cellule optionnellement thermique), détection de vieillissement — **implémenté**, voir ci-dessous. Persistance flash déléguée à `storage` |
 | `stability` ✅ | Détection de stabilité par pente lissée — **implémenté**, voir ci-dessous |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
 | `display` | Rendu écran TFT (ST7789) — valeur O2 **clignotante tant que `stability.is_stable()` est faux, fixe une fois vrai** (cf. §2) |
@@ -61,11 +61,21 @@ La chaîne de mesure O2 est le cœur du projet — elle mérite plus d'attention
 
 ### `o2_sensor` — partie pure implémentée
 
-`voltage_to_o2_percent(v_measured_mv, v_calibration_mv, o2_reference_percent=20.9)` : conversion linéaire, `NAN` si non calibré (`v_calibration_mv ≤ 0`). Ne possède pas l'état de calibration — fourni par l'appelant (module `calibration`, pas encore écrit).
+`voltage_to_o2_percent(v_measured_mv, v_calibration_mv, o2_reference_percent=20.9)` : conversion linéaire, `NAN` si non calibré (`v_calibration_mv ≤ 0`). Ne possède pas l'état de calibration — fourni par l'appelant (module `calibration`).
 
 La lecture ADS1115 réelle (gain `GAIN_SIXTEEN`, `readADC_Differential_0_1()`) est **volontairement reportée** à un module matériel séparé, pas encore écrit. Elle ne peut pas vivre dans `lib/o2_sensor/` : PlatformIO compile tout le contenu d'un dossier `lib/` dès qu'un seul fichier est inclus, donc mélanger code pur et code dépendant d'`Adafruit_ADS1X15`/`Arduino.h` dans le même dossier casserait `pio test -e native`. Écrite au moment du câblage, quand elle sera vérifiable sur le vrai matériel.
 
 17 tests unitaires (`test/test_o2_sensor`), tous passés du premier coup.
+
+### `calibration` — implémenté
+
+`CalibrationTracker` : tension à l'air + température **optionnelle** (sentinelle `NAN`, cohérent avec le reste du code — pas `std::optional`, portabilité ESP32/Arduino incertaine). Le DS18B20 étant explicitement optionnel dans HARDWARE.md, la température ne peut pas être un paramètre obligatoire. `has_temperature()` distingue "pas calibré" de "calibré sans sonde".
+
+Historique en buffer circulaire à capacité fixe (10, pas de valeur validée — arbitraire mais raisonnable, ajustable) pour détecter une **dérive progressive** (`is_declining()`, compare la calibration la plus ancienne *encore en mémoire* à la plus récente) en plus du seuil dur (`is_cell_aging()`). Aucune des constantes de sécurité (plage de tension plausible, seuil de remplacement ~7 mV, seuil de dérive) n'a de valeur par défaut codée en dur — toutes passées en paramètre par l'appelant, même principe que pour le coefficient thermique et la table MOD.
+
+Persistance flash **non incluse ici** — `calibrate()` ne fait qu'une gestion d'état en mémoire ; l'écriture réelle (NVS/EEPROM versionnée, cf. §2) est la responsabilité de `storage`, pas encore écrit.
+
+11 tests unitaires (`test/test_calibration`), incluant un test dédié à l'éviction du buffer circulaire (vérifie que `is_declining()` compare bien contre le plus ancien point *encore présent*, pas le tout premier historique jamais enregistré).
 
 ---
 
@@ -76,5 +86,6 @@ La lecture ADS1115 réelle (gain `GAIN_SIXTEEN`, `readADC_Differential_0_1()`) e
 - Valeurs finales de `ε`/`α`/`min_settle_ms`/`sustained_ms` pour `stability` — revues une fois sur retour d'expérience (analyseur du commerce), mais toujours pas mesurées sur la vraie cellule de ce projet.
 - Coefficient de compensation thermique (`coefficient_percent_per_c`) — à sourcer depuis la fiche technique de la cellule ou une mesure empirique.
 - Driver ADS1115 réel (lecture différentielle matérielle) — à écrire au câblage, dans un module séparé de `lib/o2_sensor/`.
+- Constantes `calibration` : plage de tension plausible à l'air, seuil de remplacement cellule, seuil de dérive, capacité de l'historique (10 par défaut, arbitraire) — aucune sourcée depuis une fiche technique vérifiée.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.
