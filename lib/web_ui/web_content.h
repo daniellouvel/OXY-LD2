@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "mod_table.h"
@@ -27,6 +28,7 @@ struct DiveStatus {
   float ppo2_setpoint;   // 1.4 ou 1.6
   bool stable;
   bool calibrated;      // faux si aucune calibration valide (jamais faite / rejetee)
+  uint32_t rest_hours = 24;  // temps de repos avant auto-calibration, configurable via /rest
 };
 
 // Habillage commun (titre + navigation entre les pages) autour d'un corps

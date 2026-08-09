@@ -85,7 +85,7 @@ L'ESP32-S3 crée son propre point d'accès WiFi au démarrage :
 | Mot de passe | `plongee24` |
 | Adresse | `http://192.168.4.1` |
 
-Pages : `/materiel` (statut ADS1115/RTC), `/plongee` (sélection ppO2 + mesure courante), `/tables` (table MOD complète). Pas d'authentification HTTP — le mot de passe WiFi protège déjà l'accès (décision explicite, cf. ARCHITECTURE.md).
+Pages : `/materiel` (statut ADS1115/RTC), `/plongee` (sélection ppO2 + mesure courante + calibration + temps de repos avant auto-calibration, réglable), `/tables` (table MOD complète). Pas d'authentification HTTP — le mot de passe WiFi protège déjà l'accès (décision explicite, cf. ARCHITECTURE.md).
 
 ## Avertissements
 

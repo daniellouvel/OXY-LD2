@@ -78,6 +78,14 @@ void test_dive_page_has_calibrate_button(void) {
   TEST_ASSERT_TRUE(page.find("action=\"/calibrate\"") != std::string::npos);
 }
 
+void test_dive_page_has_rest_hours_form(void) {
+  DiveStatus d{-1, -1, 1.6f, false, false, /*rest_hours=*/48};
+  std::string page = build_dive_page(d);
+  TEST_ASSERT_TRUE(page.find("action=\"/rest\"") != std::string::npos);
+  TEST_ASSERT_TRUE(page.find("name=\"rest_hours\"") != std::string::npos);
+  TEST_ASSERT_TRUE(page.find("value=\"48\"") != std::string::npos);
+}
+
 void test_tables_page_contains_validated_reference_rows(void) {
   std::string page = build_tables_page();
   // Points deja valides contre la table papier du club (cf. ARCHITECTURE.md).
@@ -112,6 +120,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_dive_page_shows_measurement_and_stability);
   RUN_TEST(test_dive_page_calibrated_status);
   RUN_TEST(test_dive_page_has_calibrate_button);
+  RUN_TEST(test_dive_page_has_rest_hours_form);
   RUN_TEST(test_tables_page_contains_validated_reference_rows);
   RUN_TEST(test_status_json_contains_expected_fields);
   return UNITY_END();

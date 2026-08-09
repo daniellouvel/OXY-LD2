@@ -35,11 +35,16 @@
 //
 // Calibration - conception detaillee avec l'utilisateur (cf. conversation) :
 //  - Persistee reellement en flash (Preferences NVS), chargee au boot.
-//  - Auto-calibration armee au demarrage SEULEMENT si une calibration
-//    precedente valide existe ET que >= kMinRestSeconds (24h) se sont
-//    ecoules depuis - protege du redemarrage rapide (gaz residuel dans le
-//    circuit). Jamais armee au tout premier boot (aucune calibration a
-//    proteger) - calibration manuelle requise la premiere fois.
+//  - Auto-calibration armee SEULEMENT si une calibration precedente valide
+//    existe ET que >= g_rest_seconds (24h par defaut, reglable via
+//    /plongee, persiste en flash) se sont ecoules depuis - protege du
+//    redemarrage rapide (gaz residuel dans le circuit). Jamais armee au
+//    tout premier boot (aucune calibration a proteger) - calibration
+//    manuelle requise la premiere fois. Reevaluee a chaque tour de loop()
+//    (maybe_arm_auto_calibration()), pas seulement au boot : sinon un
+//    appareil qui tourne en continu sans redemarrer ne se rearmerait
+//    jamais, et changer le temps de repos depuis le web ne prendrait effet
+//    qu'au prochain redemarrage.
 //  - Se declenche seulement quand stability.is_stable() est vrai - jamais
 //    sur une lecture instantanee.
 //  - stability tourne sur la tension BRUTE (filtered_mv), pas sur le %O2
@@ -80,7 +85,9 @@ CalibrationTracker calibration(5.0f, 15.0f);
 uint32_t g_last_calibration_ts = 0;  // secondes Unix, pour la serialisation flash
 
 bool auto_cal_armed = false;
-constexpr uint32_t kMinRestSeconds = 24u * 3600u;  // 24h, comme OXY-LD
+// 24h par defaut (comme OXY-LD), reglable via /plongee (persiste en flash,
+// cle "rest_h") - cf. commentaire d'en-tete.
+uint32_t g_rest_seconds = 24u * 3600u;
 
 // Pente en mV/s (pas %O2/s, cf. commentaire d'en-tete).
 // Historique : 0.01 (extrapolation de l'ancien seuil %O2/s) jamais
@@ -118,9 +125,25 @@ void save_calibration_to_flash() {
   prefs.putBytes("cal", buf, kCalibrationStorageSize);
 }
 
+// Arme l'auto-calibration des que le temps de repos configure est ecoule -
+// appelee au boot (apres chargement flash) ET a chaque tour de loop() (cout
+// negligeable : une comparaison, pas d'I2C). Ne log qu'au moment ou l'etat
+// bascule a vrai, pas a chaque appel (sinon spam serie a 10-20 Hz).
+void maybe_arm_auto_calibration() {
+  if (auto_cal_armed || !calibration.is_calibrated()) return;
+  uint32_t age_s = calibration.age_ms(calibration_clock());
+  if (age_s >= g_rest_seconds) {
+    auto_cal_armed = true;
+    Serial.printf("Auto-calibration armee (%lu h depuis la derniere calibration, seuil %lu h)\n",
+                  static_cast<unsigned long>(age_s / 3600),
+                  static_cast<unsigned long>(g_rest_seconds / 3600));
+  }
+}
+
 // Etat partage avec les handlers web, protege par g_mutex - cf. commentaire
-// d'en-tete. ppo2_setpoint et calibration_requested sont les seuls champs
-// modifiables depuis le web ; les autres sont mis a jour par loop().
+// d'en-tete. ppo2_setpoint, calibration_requested, rest_hours/
+// rest_hours_changed sont les seuls champs modifiables depuis le web ; les
+// autres sont mis a jour par loop().
 struct SharedState {
   int o2_percent = -1;
   int mod_meters = -1;
@@ -131,6 +154,8 @@ struct SharedState {
   float ppo2_setpoint = 1.6f;
   bool calibrated = false;
   bool calibration_requested = false;
+  uint32_t rest_hours = 24;
+  bool rest_hours_changed = false;
 };
 SharedState g_state;
 SemaphoreHandle_t g_mutex = nullptr;
@@ -177,6 +202,7 @@ void handle_plongee(AsyncWebServerRequest* request) {
     d.stable = g_state.stable;
     d.ppo2_setpoint = g_state.ppo2_setpoint;
     d.calibrated = g_state.calibrated;
+    d.rest_hours = g_state.rest_hours;
     xSemaphoreGive(g_mutex);
   }
   request->send(200, "text/html", build_dive_page(d).c_str());
@@ -192,6 +218,20 @@ void handle_set_ppo2(AsyncWebServerRequest* request) {
     if (v == 1.4f || v == 1.6f) {
       if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
         g_state.ppo2_setpoint = v;
+        xSemaphoreGive(g_mutex);
+      }
+    }
+  }
+  request->redirect("/plongee");
+}
+
+void handle_set_rest(AsyncWebServerRequest* request) {
+  if (request->hasParam("rest_hours", true)) {
+    int v = request->getParam("rest_hours", true)->value().toInt();
+    if (v >= 1 && v <= 500) {
+      if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
+        g_state.rest_hours = static_cast<uint32_t>(v);
+        g_state.rest_hours_changed = true;
         xSemaphoreGive(g_mutex);
       }
     }
@@ -240,6 +280,13 @@ void setup() {
 
   // -- Calibration : chargement flash + decision d'auto-armement --
   prefs.begin("oxyld2", false);
+
+  uint32_t saved_rest_h = prefs.getUInt("rest_h", 24);
+  g_rest_seconds = saved_rest_h * 3600u;
+  g_state.rest_hours = saved_rest_h;
+  Serial.printf("Temps de repos avant auto-calibration : %lu h\n",
+                static_cast<unsigned long>(saved_rest_h));
+
   bool loaded = false;
   if (prefs.getBytesLength("cal") == kCalibrationStorageSize) {
     uint8_t buf[kCalibrationStorageSize];
@@ -252,16 +299,14 @@ void setup() {
     }
   }
   if (loaded) {
-    uint32_t age_s = calibration.age_ms(calibration_clock());
-    if (age_s >= kMinRestSeconds) {
-      auto_cal_armed = true;
-      Serial.printf("Auto-calibration armee (%lu h depuis la derniere calibration)\n",
-                    static_cast<unsigned long>(age_s / 3600));
-    } else {
+    maybe_arm_auto_calibration();
+    if (!auto_cal_armed) {
+      uint32_t age_s = calibration.age_ms(calibration_clock());
       Serial.printf(
-          "Calibration recente (%lu h) - pas d'auto-calibration avant %lu h (repos)\n",
+          "Calibration recente (%lu h) - pas d'auto-calibration avant %lu h (repos, "
+          "modifiable via /plongee)\n",
           static_cast<unsigned long>(age_s / 3600),
-          static_cast<unsigned long>(kMinRestSeconds / 3600));
+          static_cast<unsigned long>(g_rest_seconds / 3600));
     }
   } else {
     Serial.println("Aucune calibration valide en flash - calibration manuelle requise (web /plongee)");
@@ -293,6 +338,7 @@ void setup() {
   server.on("/plongee", HTTP_GET, handle_plongee);
   server.on("/tables", HTTP_GET, handle_tables);
   server.on("/ppo2", HTTP_POST, handle_set_ppo2);
+  server.on("/rest", HTTP_POST, handle_set_rest);
   server.on("/calibrate", HTTP_POST, handle_calibrate);
 
   server.on("/generate_204", HTTP_ANY,
@@ -331,12 +377,28 @@ void loop() {
 
   float ppo2_setpoint = 1.6f;
   bool calibration_requested = false;
+  uint32_t rest_hours = 24;
+  bool rest_hours_changed = false;
   if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
     ppo2_setpoint = g_state.ppo2_setpoint;
     calibration_requested = g_state.calibration_requested;
     g_state.calibration_requested = false;
+    rest_hours = g_state.rest_hours;
+    rest_hours_changed = g_state.rest_hours_changed;
+    g_state.rest_hours_changed = false;
     xSemaphoreGive(g_mutex);
   }
+
+  if (rest_hours_changed) {
+    g_rest_seconds = rest_hours * 3600u;
+    prefs.putUInt("rest_h", rest_hours);
+    Serial.printf("Temps de repos avant auto-calibration modifie : %lu h\n",
+                  static_cast<unsigned long>(rest_hours));
+  }
+
+  // Reevaluee a chaque tour (pas seulement au boot) - cf. commentaire
+  // d'en-tete de maybe_arm_auto_calibration().
+  maybe_arm_auto_calibration();
 
   if (!ads_ok) {
     show_error(ppo2_setpoint);
@@ -351,11 +413,11 @@ void loop() {
   // stability sur la tension BRUTE, pas le %O2 - cf. commentaire d'en-tete.
   stability.push_sample(filtered_mv, now);
 
-  // -- Calibration : auto (armee au boot) ou manuelle (bouton web) --
-  // Toutes deux exigent la stabilite ; toutes deux beneficient de la plage
-  // de tension plausible deja appliquee par calibration.calibrate(). Seule
-  // l'auto-calibration est en plus soumise au temps de repos (deja
-  // verifie une fois au boot pour l'armement).
+  // -- Calibration : auto (armee par maybe_arm_auto_calibration() ci-dessus)
+  // ou manuelle (bouton web) -- Toutes deux exigent la stabilite ; toutes
+  // deux beneficient de la plage de tension plausible deja appliquee par
+  // calibration.calibrate(). Seule l'auto-calibration est en plus soumise
+  // au temps de repos configurable (g_rest_seconds).
   //
   // Retour visuel (display.notify_calibration_attempt) uniquement pour la
   // demande MANUELLE (bouton web) - retour utilisateur : cliquer
