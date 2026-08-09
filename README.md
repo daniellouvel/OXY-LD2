@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Premier module implémenté et testé (`mod_calc` — MOD par table statique). Le reste du firmware reste à écrire module par module.
+> **Statut : en cours.** Deux modules implémentés et testés (`mod_calc`, `stability`). Le reste du firmware reste à écrire module par module.
 
 ---
 
@@ -25,9 +25,11 @@ OXY-LD2/
 ├── src/
 │   └── main.cpp          Point d'entrée firmware
 ├── lib/                  Modules privés (un par responsabilité)
-│   └── mod_calc/          MOD par table statique + valeur O2 canonique (implémenté)
+│   ├── mod_calc/          MOD par table statique + valeur O2 canonique
+│   └── stability/         Détection de stabilité (pente lissée EMA)
 ├── test/                 Tests unitaires PlatformIO (pio test -e native)
-│   └── test_mod_calc/
+│   ├── test_mod_calc/
+│   └── test_stability/
 ├── tools/
 │   └── generate_mod_table.py   Génère les tables de lib/mod_calc/mod_table.cpp
 ├── docs/

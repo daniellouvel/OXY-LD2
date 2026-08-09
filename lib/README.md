@@ -2,4 +2,5 @@
 
 Bibliothèques privées PlatformIO, une par responsabilité matérielle ou fonctionnelle (voir la table dans [ARCHITECTURE.md](../ARCHITECTURE.md)). Les modules sont créés au fil de l'implémentation, pas d'avance.
 
-- `mod_calc/` — MOD par table statique (O2 21-100%, ppO2 1.4/1.6) + valeur O2 canonique (arrondi entier vers le haut). Premier module implémenté, testé en `native`.
+- `mod_calc/` — MOD par table statique (O2 21-100%, ppO2 1.4/1.6) + valeur O2 canonique (arrondi entier vers le haut). Testé en `native`.
+- `stability/` — détection de stabilité par pente lissée (EMA) de la mesure O2, `min_settle_ms`/`sustained_ms` cumulatifs. Testé en `native`.
