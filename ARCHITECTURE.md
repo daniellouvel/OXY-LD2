@@ -22,7 +22,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | `printer` ✅ | Génération étiquette TSPL — **implémenté**, voir ci-dessous. Envoi UART reporté (imprimante non câblée) |
 | `led_status` ✅ | Codes couleur LED d'état — **implémenté**, voir ci-dessous. Rendu NeoPixel réel non inclus |
 | `buttons` ✅ | Détection appui court/long — **implémenté**, voir ci-dessous. Lecture TTP223 réelle non incluse (boutons non câblés) |
-| `web_ui` | Point d'accès WiFi + serveur web |
+| `web_ui` ✅ | Point d'accès WiFi + serveur web, génération de pages — **implémenté**, voir ci-dessous. SSID confirmé actif, pages non testées via navigateur |
 
 Chaque module ne connaît que son propre matériel — `o2_sensor` ignore l'existence de l'écran, `display` ignore l'ADS1115. Le fichier `src/main.cpp` orchestre, sans logique métier propre.
 
@@ -172,6 +172,25 @@ Boucle : `ads1115_reader` → `GlitchFilter` → `voltage_to_o2_percent` → `St
 **Bug trouvé et corrigé avant tout flash** : une coquille `# vrai declenchement...` (dièse au lieu de `//`) dans un commentaire aurait été interprétée comme une directive préprocesseur invalide — repérée et corrigée avant la première compilation.
 
 **Vérifié par log série réel** (cf. `ads1115_reader` ci-dessus pour les valeurs) : le pipeline complet tourne sans planter, produit des valeurs plausibles et cohérentes avec la table MOD validée. Diagnostic série ajouté spécifiquement cette nuit (`Serial.printf` 1×/s dans `loop()`) pour ne pas se contenter d'une absence d'erreur comme preuve de fonctionnement.
+
+**ppO2 n'est plus une constante** : `constexpr float kPpo2Setpoint` remplacé par `SharedState::ppo2_setpoint` (mutable, protégé par mutex), réglable depuis la page web `/plongee` — cf. `web_ui` ci-dessous.
+
+### `web_ui` — implémenté, SSID confirmé actif
+
+Demande explicite : configuration entièrement via serveur web accessible à l'encadrant, plusieurs pages (matériel / paramètres de plongée ppO2 / tables). OXY-LD a déjà exactement ce système (point d'accès WiFi + `ESPAsyncWebServer`, JSON pour le polling, mutex FreeRTOS pour l'accès concurrent à l'état partagé) — repris comme référence plutôt que réinventé.
+
+**Découpage pur/matériel, même principe que les modules précédents** : `lib/web_ui/web_content.h` génère le HTML/JSON (chaînes `std::string`, aucune dépendance `WiFi`/`AsyncWebServer`) à partir de structs `HardwareStatus`/`DiveStatus` simples — testable en `native`. Le câblage réel (`WiFi.softAP`, routes `AsyncWebServer`, mutex) vit dans `src/main.cpp`, comme chez OXY-LD qui a la même contrainte d'accès à l'état partagé.
+
+**Pages** (décidées avec l'utilisateur — page matériel = statut diagnostic seul pour l'instant, pas d'auth HTTP, le mot de passe WiFi suffit) :
+- `/materiel` — ADS1115 détecté ?, RTC détecté ? + heure, dernière tension lue
+- `/plongee` — sélecteur ppO2 (1.4/1.6, `POST /ppo2`) + mesure courante (O2%, MOD, stabilité)
+- `/tables` — table MOD complète, **réutilise directement les données de `mod_table.h`** — pas de nouvelle source de vérité, la même table déjà validée contre la table du club
+
+**Écart déliberé par rapport à OXY-LD, documenté et assumé** : OXY-LD appelle `rtc.now()` directement depuis un handler web (après libération du mutex d'état, mais l'accès I2C lui-même n'est pas protégé). Risque réel : `AsyncWebServer` exécute ses handlers sur sa propre tâche FreeRTOS, potentiellement concurrente avec `loop()` — deux accès I2C concurrents (un depuis `loop()`, un depuis un handler web) pourraient corrompre une transaction sur le bus. Ici, **seul `loop()` touche le matériel I2C** ; les handlers web ne lisent jamais `ads`/`rtc` directement, uniquement le `SharedState` mis à jour par `loop()` à chaque itération sous mutex.
+
+**Vérifié** : le SSID `OXY-LD2` (WPA2, mot de passe `plongee24`) est confirmé actif par scan WiFi (`netsh wlan show networks`, sans rejoindre le réseau). Le firmware compile, flashe, et le pipeline de mesure continue de tourner normalement avec le mutex en place (`ppo2=1.6` visible dans le diagnostic série, confirmant la lecture sous mutex sans blocage). **Non vérifié** : le contenu réel des pages via un navigateur — nécessite de rejoindre le point d'accès WiFi depuis un appareil, pas fait au moment de ce commit (déconnecterait la machine de développement de son réseau actuel, à faire avec l'accord explicite de l'utilisateur ou depuis un autre appareil).
+
+8 tests unitaires (`test/test_web_ui`), incluant un piège de test découvert et corrigé : le CSS `.status-bad{...}`/`.status-ok{...}` étant toujours présent via `page_shell()`, chercher juste `"status-bad"` le trouve toujours — corrigé en cherchant `class="status-bad"` (usage réel), pas juste le nom de la classe.
 
 ---
 

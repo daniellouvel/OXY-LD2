@@ -10,3 +10,4 @@ Tests unitaires PlatformIO (Unity, `pio test -e native`) pour la logique pure : 
 - `test_printer/` — champs attendus dans la commande TSPL, MOD invalide, formatage ppO2, buffer trop petit.
 - `test_led_status/` — couleur/clignotement par état, couleurs deux-à-deux distinctes.
 - `test_buttons/` — cycles indépendants, non-répétition du LongPress, rollover `millis()`.
+- `test_web_ui/` — contenu des 3 pages (matériel/plongée/tables), sélection ppO2 correcte, JSON de statut, table MOD réutilisée telle quelle depuis `mod_table.h`.

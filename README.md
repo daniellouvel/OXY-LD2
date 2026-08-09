@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Huit modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage` — sérialisation calibration seule, `printer`, `led_status`, `buttons`). Première intégration matérielle flashée et **confirmée fonctionnelle** sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT) — mesure, calcul MOD et affichage vérifiés de bout en bout, police/format d'affichage repris d'OXY-LD.
+> **Statut : en cours.** Neuf modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage`, `printer`, `led_status`, `buttons`, `web_ui`). Intégration matérielle flashée et **confirmée fonctionnelle** sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT + RTC) — mesure, calcul MOD et affichage vérifiés de bout en bout. Serveur web de configuration (`/materiel`, `/plongee`, `/tables`) intégré, SSID `OXY-LD2` confirmé actif — pages pas encore testées via navigateur.
 
 ---
 
@@ -35,7 +35,8 @@ OXY-LD2/
 │   ├── buttons/           Détection appui court/long
 │   ├── ads1115_reader/    Lecture ADS1115 réelle (matériel, vérifié sur carte)
 │   ├── display/           Rendu écran TFT ST7789, police/format OXY-LD (matériel, vérifié sur carte)
-│   └── rtc_clock/         Horodatage RTC PCF8563 (matériel, vérifié sur carte)
+│   ├── rtc_clock/         Horodatage RTC PCF8563 (matériel, vérifié sur carte)
+│   └── web_ui/            Génération HTML/JSON du serveur web (matériel : WiFi/AsyncWebServer dans src/main.cpp)
 ├── test/                 Tests unitaires PlatformIO (pio test -e native)
 │   ├── test_mod_calc/
 │   ├── test_stability/
@@ -44,7 +45,8 @@ OXY-LD2/
 │   ├── test_storage/
 │   ├── test_printer/
 │   ├── test_led_status/
-│   └── test_buttons/
+│   ├── test_buttons/
+│   └── test_web_ui/
 ├── tools/
 │   └── generate_mod_table.py   Génère les tables de lib/mod_calc/mod_table.cpp
 ├── docs/
@@ -72,6 +74,18 @@ pio device monitor -p COMx -b 115200             # lire les logs serie
 ```
 
 Premier build : télécharge les vraies bibliothèques (`Adafruit ADS1X15`, `Adafruit GFX`/`ST7735-ST7789`, `RTClib`, etc.) dans `.pio/libdeps/esp32s3/`. La carte utilisée cette nuit apparaissait sous Windows comme `COM6` (USB JTAG/serial natif ESP32-S3).
+
+## Serveur web de configuration
+
+L'ESP32-S3 crée son propre point d'accès WiFi au démarrage :
+
+| Paramètre | Valeur |
+|---|---|
+| SSID | `OXY-LD2` |
+| Mot de passe | `plongee24` |
+| Adresse | `http://192.168.4.1` |
+
+Pages : `/materiel` (statut ADS1115/RTC), `/plongee` (sélection ppO2 + mesure courante), `/tables` (table MOD complète). Pas d'authentification HTTP — le mot de passe WiFi protège déjà l'accès (décision explicite, cf. ARCHITECTURE.md).
 
 ## Avertissements
 

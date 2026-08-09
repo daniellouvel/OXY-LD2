@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
 
 #include <cmath>
 
@@ -12,8 +14,9 @@
 #include "o2_value.h"
 #include "rtc_clock.h"
 #include "stability.h"
+#include "web_content.h"
 
-// Boucle de mesure de bout en bout - PREMIERE INTEGRATION MATERIELLE.
+// Boucle de mesure de bout en bout + serveur web de configuration.
 // Voir ARCHITECTURE.md pour le detail des limites et de ce qui est verifie.
 //
 // Cable a ce jour : ESP32-S3 + ADS1115 + cellule O2 + ecran TFT + RTC
@@ -23,14 +26,24 @@
 //    a l'affichage)
 //  - pas de compensation thermique (apply_thermal_compensation() non
 //    appelee - has_temperature() resterait de toute facon faux)
-//  - ppO2 fixe en dur a 1.6 (pas de bouton pour la choisir)
+//  - ppO2 reglable depuis la page web /plongee (remplace le bouton qu'on
+//    n'a pas) - plus une constexpr, cf. g_state ci-dessous
 //
 // Calibration : pas de bouton pour declencher une vraie calibration.
 // Auto-calibration NAIVE sur la toute premiere lecture valide au
-// demarrage - UNIQUEMENT pour ce premier smoke-test de bout en bout, PAS
-// la vraie fonctionnalite d'auto-calibration d'OXY-LD (qui verifie la
-// stabilite et se declenche apres un arret prolonge). A remplacer par un
-// vrai declenchement (bouton) des que cable.
+// demarrage - PAS la vraie fonctionnalite d'auto-calibration d'OXY-LD (qui
+// verifie la stabilite et se declenche apres un arret prolonge). A
+// remplacer par un vrai declenchement (bouton) des que cable.
+//
+// Serveur web : point d'acces WiFi (pas d'authentification HTTP - le mot
+// de passe WiFi protege deja l'acces, decision explicite pour rester
+// simple, cf. ARCHITECTURE.md). Concurrence : AsyncWebServer execute ses
+// handlers sur sa propre tache FreeRTOS, potentiellement concurrente avec
+// loop(). Seul loop() touche le materiel I2C (ADS1115, RTC) - les
+// handlers web ne lisent jamais le materiel directement, uniquement le
+// snapshot g_state protege par g_mutex, pour eviter tout acces concurrent
+// au bus I2C entre deux taches (OXY-LD, lui, appelle rtc.now() directement
+// depuis un handler web ; ecart deliberement different ici, plus prudent).
 
 namespace {
 
@@ -38,8 +51,10 @@ Ads1115Reader ads;
 Display display;
 RtcClock rtc;
 GlitchFilter glitch_filter;
+AsyncWebServer server(80);
 
 bool rtc_ok = false;
+bool ads_ok = false;
 
 // Plage de tension plausible non sourcee (pas de fiche technique
 // verifiee pour la cellule montee) - point de depart large, a resserrer.
@@ -50,10 +65,24 @@ CalibrationTracker calibration(5.0f, 15.0f);
 StabilityConfig stability_config{0.02f, 0.3f, 5000, 3000, 10000};
 StabilityTracker stability(stability_config);
 
-constexpr float kPpo2Setpoint = 1.6f;  // fixe - pas de bouton cable ce soir
-constexpr PPO2Setpoint kPpo2SetpointEnum = PPO2Setpoint::P16;  // doit rester coherent avec kPpo2Setpoint
+// Etat partage avec les handlers web, protege par g_mutex - cf. commentaire
+// d'en-tete. ppo2_setpoint est le seul champ modifiable depuis le web
+// (POST /ppo2) ; les autres sont mis a jour par loop() a chaque iteration.
+struct SharedState {
+  int o2_percent = -1;
+  int mod_meters = -1;
+  bool stable = false;
+  float last_v_mv = 0.0f;
+  int rtc_hour = 0;
+  int rtc_minute = 0;
+  float ppo2_setpoint = 1.6f;
+};
+SharedState g_state;
+SemaphoreHandle_t g_mutex = nullptr;
 
-bool ads_ok = false;
+constexpr TickType_t kMutexTimeout = pdMS_TO_TICKS(50);
+
+PPO2Setpoint ppo2_enum(float ppo2) { return (ppo2 >= 1.5f) ? PPO2Setpoint::P16 : PPO2Setpoint::P14; }
 
 // Lissage COSMETIQUE reserve a l'affichage, pour attenuer l'oscillation
 // visible entre deux valeurs entieres adjacentes pres d'une frontiere
@@ -66,9 +95,54 @@ bool ads_ok = false;
 float display_fo2_smoothed = NAN;
 constexpr float kDisplayEmaAlpha = 0.15f;
 
-void show_error() {
+void show_error(float ppo2) {
   RgbColor c = led_status_for(SystemState::Error).color;
-  display.show_measurement(0, -1, kPpo2Setpoint, c, /*stable=*/false, /*o2_value_visible=*/true);
+  display.show_measurement(0, -1, ppo2, c, /*stable=*/false, /*o2_value_visible=*/true);
+}
+
+// -- Handlers web : lisent/ecrivent uniquement g_state sous mutex, jamais
+// le materiel directement (cf. commentaire d'en-tete). --
+
+void handle_materiel(AsyncWebServerRequest* request) {
+  HardwareStatus hw{};
+  hw.ads_ok = ads_ok;
+  if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
+    hw.rtc_ok = rtc_ok;
+    hw.rtc_hour = g_state.rtc_hour;
+    hw.rtc_minute = g_state.rtc_minute;
+    hw.last_v_mv = g_state.last_v_mv;
+    xSemaphoreGive(g_mutex);
+  }
+  request->send(200, "text/html", build_hardware_page(hw).c_str());
+}
+
+void handle_plongee(AsyncWebServerRequest* request) {
+  DiveStatus d{};
+  if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
+    d.o2_percent = g_state.o2_percent;
+    d.mod_meters = g_state.mod_meters;
+    d.stable = g_state.stable;
+    d.ppo2_setpoint = g_state.ppo2_setpoint;
+    xSemaphoreGive(g_mutex);
+  }
+  request->send(200, "text/html", build_dive_page(d).c_str());
+}
+
+void handle_tables(AsyncWebServerRequest* request) {
+  request->send(200, "text/html", build_tables_page().c_str());
+}
+
+void handle_set_ppo2(AsyncWebServerRequest* request) {
+  if (request->hasParam("ppo2", true)) {
+    float v = request->getParam("ppo2", true)->value().toFloat();
+    if (v == 1.4f || v == 1.6f) {
+      if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
+        g_state.ppo2_setpoint = v;
+        xSemaphoreGive(g_mutex);
+      }
+    }
+  }
+  request->redirect("/plongee");
 }
 
 }  // namespace
@@ -76,6 +150,8 @@ void show_error() {
 void setup() {
   Serial.begin(115200);
   Serial.println("OXY-LD2 - boot");
+
+  g_mutex = xSemaphoreCreateMutex();
 
   ads_ok = ads.begin();
   if (!ads_ok) {
@@ -97,17 +173,36 @@ void setup() {
   } else {
     Serial.println("RTC detecte, heure OK");
   }
+
+  WiFi.softAP("OXY-LD2", "plongee24");
+  Serial.print("Point d'acces WiFi OXY-LD2 demarre, IP : ");
+  Serial.println(WiFi.softAPIP());
+
+  server.on("/", HTTP_GET,
+            [](AsyncWebServerRequest* r) { r->redirect("/materiel"); });
+  server.on("/materiel", HTTP_GET, handle_materiel);
+  server.on("/plongee", HTTP_GET, handle_plongee);
+  server.on("/tables", HTTP_GET, handle_tables);
+  server.on("/ppo2", HTTP_POST, handle_set_ppo2);
+  server.begin();
+  Serial.println("Serveur web demarre");
 }
 
 void loop() {
+  int hour = 0, minute = 0;
   if (rtc_ok) {
-    int hour, minute;
     rtc.now(&hour, &minute);
     display.show_clock(hour, minute);
   }
 
+  float ppo2_setpoint = 1.6f;
+  if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
+    ppo2_setpoint = g_state.ppo2_setpoint;
+    xSemaphoreGive(g_mutex);
+  }
+
   if (!ads_ok) {
-    show_error();
+    show_error(ppo2_setpoint);
     return;
   }
 
@@ -124,7 +219,7 @@ void loop() {
 
   float fo2_raw = voltage_to_o2_percent(filtered_mv, calibration.current_v_air_mv());
   if (!is_fo2_valid(fo2_raw)) {
-    show_error();
+    show_error(ppo2_setpoint);
     return;
   }
 
@@ -137,7 +232,7 @@ void loop() {
         kDisplayEmaAlpha * fo2_raw + (1.0f - kDisplayEmaAlpha) * display_fo2_smoothed;
   }
   int o2_display = o2_display_value(display_fo2_smoothed);
-  int mod = mod_lookup(o2_display, kPpo2SetpointEnum);
+  int mod = mod_lookup(o2_display, ppo2_enum(ppo2_setpoint));
 
   SystemState state = stability.is_stable() ? SystemState::Stable : SystemState::Stabilizing;
   LedStatusOutput led = led_status_for(state);
@@ -147,8 +242,18 @@ void loop() {
   // cf. ARCHITECTURE.md "Retour UI attendu".
   bool o2_visible = stability.is_stable() || ((now / 800) % 2 == 0);
 
-  display.show_measurement(o2_display, mod, kPpo2Setpoint, led.color, stability.is_stable(),
+  display.show_measurement(o2_display, mod, ppo2_setpoint, led.color, stability.is_stable(),
                             o2_visible);
+
+  if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
+    g_state.o2_percent = o2_display;
+    g_state.mod_meters = mod;
+    g_state.stable = stability.is_stable();
+    g_state.last_v_mv = filtered_mv;
+    g_state.rtc_hour = hour;
+    g_state.rtc_minute = minute;
+    xSemaphoreGive(g_mutex);
+  }
 
   // Diagnostic serie periodique (1x/s) - ajoute pour verifier reellement le
   // pipeline cette nuit, pas seulement l'absence de crash. A retirer ou
@@ -156,14 +261,11 @@ void loop() {
   static uint32_t last_log_ms = 0;
   if (now - last_log_ms >= 1000) {
     last_log_ms = now;
-    int h = -1, m = -1;
-    if (rtc_ok) {
-      rtc.now(&h, &m);
-    }
     Serial.printf(
         "v_mv=%.3f fo2=%.2f fo2_smooth=%.2f o2=%d mod=%d slope=%.4f stable=%d cal_v=%.3f "
-        "rtc_ok=%d clock=%02d:%02d\n",
+        "rtc_ok=%d clock=%02d:%02d ppo2=%.1f\n",
         filtered_mv, fo2_raw, display_fo2_smoothed, o2_display, mod, stability.current_slope(),
-        stability.is_stable() ? 1 : 0, calibration.current_v_air_mv(), rtc_ok ? 1 : 0, h, m);
+        stability.is_stable() ? 1 : 0, calibration.current_v_air_mv(), rtc_ok ? 1 : 0, hour,
+        minute, static_cast<double>(ppo2_setpoint));
   }
 }
