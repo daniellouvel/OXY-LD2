@@ -24,7 +24,12 @@ void Display::begin() {
   // MISO non cable (pas de lecture d'ID au boot) - cf. HARDWARE.md.
   spi_.begin(kPinSck, /*miso=*/-1, kPinMosi, kPinCs);
   tft_.init(240, 320);
-  tft_.invertDisplay(true);
+  // invertDisplay(true) copie d'OXY-LD produit un fond BLANC sur ce
+  // panneau precis (retour utilisateur, persistant apres deux tentatives
+  // de fillScreen(BLACK) explicite) - les clones ST7789 varient d'un lot
+  // a l'autre, HARDWARE.md notait deja ce reglage "a revalider sur le
+  // module reel". Inversion desactivee : essai empirique, a confirmer.
+  tft_.invertDisplay(false);
   tft_.setRotation(1);
 
   // Corrige un miroir horizontal connu sur ce clone ST7789 - MADCTL=MV
@@ -88,26 +93,25 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     }
   }
 
-  // -- Badge stabilite (haut-droit) -- ne clignote pas, cf. header. Agrandi
-  // (scale=2) suite au retour utilisateur ("texte dans le petit carre trop
-  // petit") - la version initiale reprenait la taille exacte d'OXY-LD
-  // (scale=1) mais s'est averee trop petite pour etre lisible ici.
+  // -- Badge stabilite (haut-droit) -- ne clignote pas, cf. header. Taille
+  // et police reprises EXACTEMENT d'OXY-LD (scale=1, boite 72x22) - un
+  // agrandissement (scale=2) a ete essaye puis explicitement rejete par
+  // retour utilisateur, qui a demande de revenir au gabarit d'origine.
   if (force || stable != prev_badge_stable_ || !prev_badge_shown_) {
     prev_badge_shown_ = true;
     prev_badge_stable_ = stable;
-    constexpr int16_t bx = 224, by = 0, bw = 96, bh = 32;
-    tft_.fillRect(bx, by, bw, bh, ST77XX_BLACK);
+    tft_.fillRect(240, 0, kScreenW - 240, 26, ST77XX_BLACK);
     uint16_t badge_col = stable ? ST77XX_GREEN : tft_.color565(230, 120, 0);
-    tft_.fillRoundRect(bx + 2, by + 2, bw - 4, bh - 4, 5, badge_col);
+    tft_.fillRoundRect(244, 2, 72, 22, 4, badge_col);
     const char* txt = stable ? "OK" : "...";
     tft_.setFont(&FreeSansBold9pt7b);
-    tft_.setTextSize(2);
+    tft_.setTextSize(1);
     int16_t bx1, by1;
     uint16_t bw1, bh1;
     tft_.getTextBounds(txt, 0, 0, &bx1, &by1, &bw1, &bh1);
     tft_.setTextColor(ST77XX_BLACK);
-    tft_.setCursor(bx + (bw - static_cast<int16_t>(bw1)) / 2 - bx1,
-                   by + (bh - static_cast<int16_t>(bh1)) / 2 - by1);
+    tft_.setCursor(244 + (72 - static_cast<int16_t>(bw1)) / 2 - bx1,
+                   2 + (22 - static_cast<int16_t>(bh1)) / 2 - by1);
     tft_.print(txt);
     tft_.setFont(nullptr);
   }

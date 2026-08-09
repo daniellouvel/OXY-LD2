@@ -1,5 +1,7 @@
 #include <Arduino.h>
 
+#include <cmath>
+
 #include "ads1115_reader.h"
 #include "calibration.h"
 #include "conversion.h"
@@ -52,6 +54,17 @@ constexpr float kPpo2Setpoint = 1.6f;  // fixe - pas de bouton cable ce soir
 constexpr PPO2Setpoint kPpo2SetpointEnum = PPO2Setpoint::P16;  // doit rester coherent avec kPpo2Setpoint
 
 bool ads_ok = false;
+
+// Lissage COSMETIQUE reserve a l'affichage, pour attenuer l'oscillation
+// visible entre deux valeurs entieres adjacentes pres d'une frontiere
+// (ex. 21%/22%) quand le bruit du signal brut chevauche cette frontiere.
+// Ne remplace PAS fo2_raw pour stability.push_sample() : le calcul de
+// pente doit rester sur le signal le moins transforme possible (cf.
+// ARCHITECTURE.md - deja le principe retenu pour GlitchFilter, qui evite
+// une moyenne glissante pour la meme raison). display_fo2_smoothed est un
+// second chemin, parallele, uniquement pour ce qui est montre a l'ecran.
+float display_fo2_smoothed = NAN;
+constexpr float kDisplayEmaAlpha = 0.15f;
 
 void show_error() {
   RgbColor c = led_status_for(SystemState::Error).color;
@@ -117,7 +130,13 @@ void loop() {
 
   stability.push_sample(fo2_raw, now);
 
-  int o2_display = o2_display_value(fo2_raw);
+  if (std::isnan(display_fo2_smoothed)) {
+    display_fo2_smoothed = fo2_raw;
+  } else {
+    display_fo2_smoothed =
+        kDisplayEmaAlpha * fo2_raw + (1.0f - kDisplayEmaAlpha) * display_fo2_smoothed;
+  }
+  int o2_display = o2_display_value(display_fo2_smoothed);
   int mod = mod_lookup(o2_display, kPpo2SetpointEnum);
 
   SystemState state = stability.is_stable() ? SystemState::Stable : SystemState::Stabilizing;
@@ -141,8 +160,9 @@ void loop() {
       rtc.now(&h, &m);
     }
     Serial.printf(
-        "v_mv=%.3f fo2=%.2f o2=%d mod=%d slope=%.4f stable=%d cal_v=%.3f rtc_ok=%d clock=%02d:%02d\n",
-        filtered_mv, fo2_raw, o2_display, mod, stability.current_slope(),
+        "v_mv=%.3f fo2=%.2f fo2_smooth=%.2f o2=%d mod=%d slope=%.4f stable=%d cal_v=%.3f "
+        "rtc_ok=%d clock=%02d:%02d\n",
+        filtered_mv, fo2_raw, display_fo2_smoothed, o2_display, mod, stability.current_slope(),
         stability.is_stable() ? 1 : 0, calibration.current_v_air_mv(), rtc_ok ? 1 : 0, h, m);
   }
 }
