@@ -198,6 +198,9 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
   // du projet -> Picopixel, police pixel dediee aux petites etiquettes,
   // bundlee avec Adafruit GFX) suite a un troisieme retour - demande
   // explicite de police plus petite, pas seulement de boite plus petite.
+  // Picopixel a l'echelle 1 jugee trop petite au retour suivant ("un peu
+  // plus gros") - remontee a l'echelle 2 (toujours nettement plus compacte
+  // que FreeSansBold9pt7b, cf. yAdvance 7 vs 22).
   if (force || calibrated != prev_cal_badge_calibrated_ || !prev_cal_badge_shown_) {
     prev_cal_badge_shown_ = true;
     prev_cal_badge_calibrated_ = calibrated;
@@ -207,7 +210,7 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     tft_.fillRoundRect(cx + 2, cy + 2, cw - 4, ch - 4, 5, cal_col);
     const char* txt = calibrated ? "CALIBRE" : "NON CAL";
     tft_.setFont(&Picopixel);
-    tft_.setTextSize(1);
+    tft_.setTextSize(2);
     int16_t cx1, cy1;
     uint16_t cw1, ch1;
     tft_.getTextBounds(txt, 0, 0, &cx1, &cy1, &cw1, &ch1);
