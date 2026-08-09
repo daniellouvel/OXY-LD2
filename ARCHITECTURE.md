@@ -15,7 +15,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | `stability` ✅ | Détection de stabilité par pente lissée — **implémenté**, voir ci-dessous |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
 | `display` | Rendu écran TFT (ST7789) — valeur O2 **clignotante tant que `stability.is_stable()` est faux, fixe une fois vrai** (cf. §2) |
-| `storage` | Persistance (calibration, historique, réglages) |
+| `storage` ✅ | Sérialisation versionnée de la calibration — **partiellement implémenté**, voir ci-dessous. Écriture flash réelle (NVS) reportée. Historique complet et réglages pas encore couverts |
 | `rtc_clock` | Horodatage RTC |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
 | `printer` | Génération étiquette TSPL, envoi UART |
@@ -41,7 +41,7 @@ Tests (`pio test -e native`) : bornes de la table, concordance avec la table du 
 
 Bugs déjà rencontrés sur OXY-LD à traiter structurellement plutôt qu'au cas par cas :
 
-- **Corruption EEPROM par décalage de champs** (fixée en urgence sur OXY-LD en déplaçant des champs à une adresse ≥1300) → sur OXY-LD2, la persistance passe par un stockage structuré avec **versionnage de schéma explicite** (un champ `version` en tête de struct, migration ou reset propre si la version ne correspond pas), au lieu d'offsets bruts codés en dur.
+- **Corruption EEPROM par décalage de champs** (fixée en urgence sur OXY-LD en déplaçant des champs à une adresse ≥1300) → sur OXY-LD2, la persistance passe par un stockage structuré avec **versionnage de schéma explicite** (un champ `version` en tête de struct, migration ou reset propre si la version ne correspond pas), au lieu d'offsets bruts codés en dur. **Tranché** : format hybride — blob versionné + checksum maison (`lib/storage/`), stocké via `Preferences.putBytes()` (NVS natif ESP32, wear-leveling géré par la bibliothèque) plutôt qu'une écriture EEPROM manuelle. Un octet de version incompatible (y compris la flash jamais écrite, lue comme `0xFF`) ou un checksum invalide fait rejeter la lecture explicitement — le même piège "flash vierge = 0xFF" qu'OXY-LD avait dû corriger après coup (auto-calibration en heures) est ici géré par construction, pas en correctif.
 - **Choix de pin invalidé a posteriori** (LED sur une strapping pin, déplacée deux fois) → la table de brochage vit à un seul endroit ([HARDWARE.md](HARDWARE.md)), vérifiée contre la documentation strapping-pin de l'ESP32-S3 *avant* implémentation, pas après un premier essai raté.
 - **Tests unitaires PlatformIO (Unity, environnement `native`)** pour toute la logique pure : calcul MOD, conversion tension→%O2, arrondi, compensation thermique, logique de calibration. Ces modules ne touchent pas au matériel — testables sans carte branchée.
 - **Watchdog matériel** activé, pour repartir proprement d'un état cohérent en cas de blocage plutôt que de rester figé.
@@ -77,15 +77,27 @@ Persistance flash **non incluse ici** — `calibrate()` ne fait qu'une gestion d
 
 11 tests unitaires (`test/test_calibration`), incluant un test dédié à l'éviction du buffer circulaire (vérifie que `is_declining()` compare bien contre le plus ancien point *encore présent*, pas le tout premier historique jamais enregistré).
 
+### `storage` — partiellement implémenté
+
+`serialize_calibration()`/`deserialize_calibration()` (`lib/storage/calibration_storage.h`) : format fixe 17 octets (version + `v_air_mv` + `temp_c` + `timestamp_ms` + checksum FNV-1a 32 bits). `temp_c` à `NAN` se sérialise/désérialise sans traitement spécial — copie brute des bits, pas d'arithmétique dessus.
+
+**Limite assumée, prise sans redemander confirmation** (« fait au mieux ») : seul le **dernier** point de calibration est persisté, pas les 10 entrées d'historique que garde `CalibrationTracker` en mémoire. Conséquence concrète : `is_declining()` ne voit que les calibrations faites depuis le dernier redémarrage, pas la dérive sur plusieurs semaines/mois que la fonctionnalité est censée capter à terme (cf. §3, "Suivi du vieillissement de cellule"). Persister l'historique complet demanderait d'exposer l'état interne de `CalibrationTracker` (déjà committé) — repoussé plutôt que fait à moitié en silence.
+
+L'écriture flash réelle (`Preferences.putBytes()`/`getBytes()`) n'est pas incluse — même raison que le driver ADS1115 : non vérifiable sans matériel, reportée au câblage.
+
+6 tests unitaires (`test/test_storage`) : aller-retour avec/sans température, version incompatible, checksum corrompu, flash vierge (`0xFF`).
+
 ---
 
 ## Ce qui n'est pas encore tranché
 
-- Format de persistance (Preferences/NVS natif ESP32 vs structure EEPROM versionnée maison).
 - Portée du firmware de test/diagnostic (OXY-LD garde des `.cpp` de diagnostic séparés dans `src/` — à reproduire ou remplacer par les tests unitaires `test/`).
 - Valeurs finales de `ε`/`α`/`min_settle_ms`/`sustained_ms` pour `stability` — revues une fois sur retour d'expérience (analyseur du commerce), mais toujours pas mesurées sur la vraie cellule de ce projet.
 - Coefficient de compensation thermique (`coefficient_percent_per_c`) — à sourcer depuis la fiche technique de la cellule ou une mesure empirique.
 - Driver ADS1115 réel (lecture différentielle matérielle) — à écrire au câblage, dans un module séparé de `lib/o2_sensor/`.
 - Constantes `calibration` : plage de tension plausible à l'air, seuil de remplacement cellule, seuil de dérive, capacité de l'historique (10 par défaut, arbitraire) — aucune sourcée depuis une fiche technique vérifiée.
+- Écriture flash réelle de `storage` (`Preferences.putBytes`/`getBytes`) — à écrire au câblage.
+- Persistance de l'historique complet de calibration (pas seulement le dernier point) — nécessite d'étendre `CalibrationTracker`.
+- Persistance de l'historique d'analyses et des réglages (ppO2 verrouillée, nom de station...) — pas encore couverte par `storage`.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.

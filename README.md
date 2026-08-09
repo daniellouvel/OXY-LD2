@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Quatre modules implémentés et testés (`mod_calc`, `stability`, `o2_sensor` — partie pure, `calibration`). Le reste du firmware reste à écrire module par module.
+> **Statut : en cours.** Cinq modules implémentés et testés (`mod_calc`, `stability`, `o2_sensor` — partie pure, `calibration`, `storage` — sérialisation calibration seule). Le reste du firmware reste à écrire module par module.
 
 ---
 
@@ -28,12 +28,14 @@ OXY-LD2/
 │   ├── mod_calc/          MOD par table statique + valeur O2 canonique
 │   ├── stability/         Détection de stabilité (pente lissée EMA)
 │   ├── o2_sensor/         Conversion tension→%O2, compensation thermique, filtre anti-glitch
-│   └── calibration/       État de calibration (air, température optionnelle), vieillissement cellule
+│   ├── calibration/       État de calibration (air, température optionnelle), vieillissement cellule
+│   └── storage/           Sérialisation versionnée de la calibration (checksum, détection flash vierge)
 ├── test/                 Tests unitaires PlatformIO (pio test -e native)
 │   ├── test_mod_calc/
 │   ├── test_stability/
 │   ├── test_o2_sensor/
-│   └── test_calibration/
+│   ├── test_calibration/
+│   └── test_storage/
 ├── tools/
 │   └── generate_mod_table.py   Génère les tables de lib/mod_calc/mod_table.cpp
 ├── docs/
