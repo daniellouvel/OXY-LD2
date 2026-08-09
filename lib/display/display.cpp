@@ -97,25 +97,33 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     }
   }
 
-  // -- Badge stabilite (haut-droit) -- ne clignote pas, cf. header. Taille
-  // et police reprises EXACTEMENT d'OXY-LD (scale=1, boite 72x22) - un
-  // agrandissement (scale=2) a ete essaye puis explicitement rejete par
-  // retour utilisateur, qui a demande de revenir au gabarit d'origine.
+  // -- Badge stabilite (haut-droit) -- ne clignote pas, cf. header.
+  //
+  // Historique de ce bloc (retours utilisateur successifs) : taille exacte
+  // d'OXY-LD (9pt, scale=1, boite 72x22) -> jugee trop petite -> agrandie
+  // en etirant la meme police a scale=2 -> rejetee ("autre chose" que la
+  // taille, probablement le rendu pixelise/grossier d'une police 9pt
+  // doublee plutot qu'une vraie plus grande police) -> retour exact
+  // OXY-LD -> toujours trop petite au meme retour. Version actuelle :
+  // police FreeSansBold12pt7b nativement (pas de scale sur une police plus
+  // petite), boite elargie pour l'accueillir - texte reellement plus grand
+  // avec un rendu net, pas un agrandissement pixelise.
   if (force || stable != prev_badge_stable_ || !prev_badge_shown_) {
     prev_badge_shown_ = true;
     prev_badge_stable_ = stable;
-    tft_.fillRect(240, 0, kScreenW - 240, 26, ST77XX_BLACK);
+    constexpr int16_t bx = 214, by = 0, bw = 106, bh = 30;
+    tft_.fillRect(bx, by, bw, bh, ST77XX_BLACK);
     uint16_t badge_col = stable ? ST77XX_GREEN : tft_.color565(230, 120, 0);
-    tft_.fillRoundRect(244, 2, 72, 22, 4, badge_col);
+    tft_.fillRoundRect(bx + 2, by + 2, bw - 4, bh - 4, 5, badge_col);
     const char* txt = stable ? "OK" : "...";
-    tft_.setFont(&FreeSansBold9pt7b);
+    tft_.setFont(&FreeSansBold12pt7b);
     tft_.setTextSize(1);
     int16_t bx1, by1;
     uint16_t bw1, bh1;
     tft_.getTextBounds(txt, 0, 0, &bx1, &by1, &bw1, &bh1);
     tft_.setTextColor(ST77XX_BLACK);
-    tft_.setCursor(244 + (72 - static_cast<int16_t>(bw1)) / 2 - bx1,
-                   2 + (22 - static_cast<int16_t>(bh1)) / 2 - by1);
+    tft_.setCursor(bx + (bw - static_cast<int16_t>(bw1)) / 2 - bx1,
+                   by + (bh - static_cast<int16_t>(bh1)) / 2 - by1);
     tft_.print(txt);
     tft_.setFont(nullptr);
   }
