@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 
@@ -52,6 +53,7 @@ Display display;
 RtcClock rtc;
 GlitchFilter glitch_filter;
 AsyncWebServer server(80);
+DNSServer dns_server;
 
 bool rtc_ok = false;
 bool ads_ok = false;
@@ -178,6 +180,14 @@ void setup() {
   Serial.print("Point d'acces WiFi OXY-LD2 demarre, IP : ");
   Serial.println(WiFi.softAPIP());
 
+  // Repond a TOUS les noms de domaine avec l'IP de la carte - necessaire
+  // pour que la verification de connectivite des telephones (qui resout
+  // un nom de domaine avant de faire la requete HTTP) aboutisse sur cet AP
+  // sans Internet reel. Sans ca, les routes /generate_204 etc. ci-dessous
+  // ne sont jamais atteintes : la resolution DNS echoue avant meme
+  // d'essayer de contacter le serveur web. Meme technique qu'OXY-LD.
+  dns_server.start(53, "*", WiFi.softAPIP());
+
   server.on("/", HTTP_GET,
             [](AsyncWebServerRequest* r) { r->redirect("/materiel"); });
   server.on("/materiel", HTTP_GET, handle_materiel);
@@ -210,6 +220,10 @@ void setup() {
 }
 
 void loop() {
+  // Avant tout retour anticipe (ads_ok faux, mesure invalide) - le DNS
+  // doit continuer a repondre meme quand la mesure ne tourne pas.
+  dns_server.processNextRequest();
+
   int hour = 0, minute = 0;
   if (rtc_ok) {
     rtc.now(&hour, &minute);
