@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Huit modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage` — sérialisation calibration seule, `printer`, `led_status`, `buttons`). Première intégration matérielle réelle flashée et vérifiée par log série sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT) — voir ARCHITECTURE.md pour le détail précis de ce qui est vérifié vs pas (l'affichage visuel notamment n'a pas encore été confirmé à l'oeil).
+> **Statut : en cours.** Huit modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage` — sérialisation calibration seule, `printer`, `led_status`, `buttons`). Première intégration matérielle flashée et **confirmée fonctionnelle** sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT) — mesure, calcul MOD et affichage vérifiés de bout en bout, police/format d'affichage repris d'OXY-LD.
 
 ---
 

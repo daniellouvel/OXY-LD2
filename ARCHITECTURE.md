@@ -15,7 +15,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | `calibration` ✅ | État de calibration (air, cellule optionnellement thermique), détection de vieillissement — **implémenté**, voir ci-dessous. Persistance flash déléguée à `storage` |
 | `stability` ✅ | Détection de stabilité par pente lissée — **implémenté**, voir ci-dessous |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
-| `display` ✅ | Rendu écran TFT (ST7789) — **implémenté, compile et flashe**, voir ci-dessous. Rendu visuel non confirmé (pas d'accès visuel à la carte) |
+| `display` ✅ | Rendu écran TFT (ST7789) — **implémenté et confirmé visuellement**, voir ci-dessous. Police/format repris d'OXY-LD |
 | `storage` ✅ | Sérialisation versionnée de la calibration — **partiellement implémenté**, voir ci-dessous. Écriture flash réelle (NVS) reportée. Historique complet et réglages pas encore couverts |
 | `rtc_clock` | Horodatage RTC |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
@@ -81,11 +81,20 @@ Tension cellule ~8.13 mV (plausible, légèrement sous la fourchette nominale ~9
 
 **Non vérifié** : je n'ai pas pu physiquement souffler/couvrir la cellule pour confirmer que la valeur réagit à un vrai changement de gaz (pas d'accès physique à la carte) — seule la variation de bruit normale est confirmée, pas la réponse à un stimulus.
 
-### `display` — implémenté, compile et flashe, **rendu visuel non confirmé**
+### `display` — implémenté et **confirmé visuellement**, police/format repris d'OXY-LD
 
-Signatures API vérifiées dans les vraies bibliothèques (`Adafruit ST7735 and ST7789 Library @ 1.11.0`, `Adafruit GFX Library @ 1.12.6`) : `Adafruit_ST7789(SPIClass*, cs, dc, rst)` (constructeur SPI matériel), `init(240,320)`, `invertDisplay(true)`, `setRotation(1)`, `sendCommand(ST77XX_MADCTL, &madctl, 1)` avec `ST77XX_MADCTL_MV` pour le miroir — toutes les constantes existent bien dans cette version de la bibliothèque, pas supposées. `SPI.begin(sck=12, miso=-1, mosi=11, cs=10)` reprend exactement la note de `HARDWARE.md`/OXY-LD sur le MISO non câblé.
+Signatures API vérifiées dans les vraies bibliothèques (`Adafruit ST7735 and ST7789 Library @ 1.11.0`, `Adafruit GFX Library @ 1.12.6`) : `Adafruit_ST7789(SPIClass*, cs, dc, rst)` (constructeur SPI matériel), `init(240,320)`, `invertDisplay(true)`, `setRotation(1)`, `sendCommand(ST77XX_MADCTL, &madctl, 1)` avec `ST77XX_MADCTL_MV` pour le miroir. `SPI.begin(sck=12, miso=-1, mosi=11, cs=10)` reprend la note de `HARDWARE.md`/OXY-LD sur le MISO non câblé.
 
-**Compile et flashe sans erreur.** Le firmware tourne (logs série confirmés, cf. `ads1115_reader` ci-dessus), donc les appels d'affichage s'exécutent sans planter. **Ce qui n'est PAS vérifié** : je n'ai aucun accès visuel à l'écran physique — je ne peux pas confirmer que le texte est lisible, bien positionné, pas inversé/mirroir malgré le `MADCTL` forcé. Positions/tailles de police jamais calibrées à l'oeil. **À vérifier par vous au réveil : est-ce que l'écran affiche quelque chose de lisible ?**
+**Confirmé par l'utilisateur au réveil** : écran lisible, O2/MOD/ppO2 dans le bon sens (orientation/MADCTL corrects) — avec un léger scintillement au premier flash.
+
+**Scintillement diagnostiqué et corrigé** en reprenant la technique et le format d'affichage réels d'OXY-LD (`OXY-LD/src/main.cpp`, `displayRead()`) plutôt que la version improvisée de cette nuit :
+- **Cause** : un `fillRect` (noir) suivi d'un redraw à *chaque* appel de `show_measurement()`, même quand rien n'a changé, produit un flash noir visible sur ce panel — même symptôme qu'OXY-LD avait documenté (qui a des environnements de diagnostic dédiés, `esp32s3-tfttest-wifi`/`nowifi`, dans son `platformio.ini`).
+- **Correction** : chaque zone (chiffre O2, badge stabilité, bande MOD/ppO2) compare son contenu au dernier contenu dessiné (cache par instance dans `Display`) et saute le `fillRect`+redraw si identique — `force_redraw()` force un redraw complet après un changement de mode.
+- **Police** : polices vectorielles `FreeSansBold9pt7b`/`FreeSansBold12pt7b`/`FreeSansBold24pt7b` (bundle `Fonts/` d'Adafruit GFX) au lieu de la police bitmap standard — confirmées présentes dans `.pio/libdeps/esp32s3/Adafruit GFX Library/Fonts/`.
+- **Gabarit** : grand chiffre O2 centré (zone y 30–148), badge "OK"/"..." en haut à droite (ne clignote pas, contrairement au chiffre), bande basse "MOD X m" / "ppO2 X.X" — positions reprises des coordonnées exactes d'OXY-LD.
+- Le clignotement du chiffre O2 pendant la stabilisation (exigence utilisateur antérieure, cf. §2 "Retour UI attendu") est **conservé** — absent d'OXY-LD, ajout spécifique à OXY-LD2. Combiné avec le cache anti-scintillement : le texte effectif (vide si invisible) est ce qui est comparé, donc le clignotement déclenche bien un redraw à chaque bascule sans revenir au scintillement continu.
+
+**ppO2 par défaut changé de 1.4 à 1.6** (demande explicite) — `mod_lookup` avec `PPO2Setpoint::P16`, vérifié par log série (`o2=21 mod=66`, correspond exactement à la valeur validée contre la table du club).
 
 ### `calibration` — implémenté
 
@@ -150,9 +159,9 @@ Boucle : `ads1115_reader` → `GlitchFilter` → `voltage_to_o2_percent` → `St
 - Écriture flash réelle de `storage` (`Preferences.putBytes`/`getBytes`) — à écrire au câblage.
 - Persistance de l'historique complet de calibration (pas seulement le dernier point) — nécessite d'étendre `CalibrationTracker`.
 - Persistance de l'historique d'analyses et des réglages (ppO2 verrouillée, nom de station...) — pas encore couverte par `storage`.
-- **Rendu visuel réel de `display`** — compile et flashe, mais personne n'a regardé l'écran physique. À confirmer au réveil.
 - **Auto-calibration naïve de `main.cpp`** (première lecture = référence) à remplacer par un vrai déclenchement (bouton `ButtonTracker`, déjà écrit) dès que les TTP223 sont câblés.
 - **Intégration RTC/DS18B20/boutons dans `main.cpp`** — hors scope de cette nuit car non câblés. `RTC_PCF8563.cpp` confirmé présent dans `RTClib @ 2.1.4` (compilé avec succès cette nuit) — l'incertitude notée précédemment sur le support PCF8563 de cette bibliothèque est levée.
-- Positions/tailles de police TSPL (`printer`) et TFT (`display`) — jamais vérifiées visuellement, points de départ à ajuster.
+- Positions/tailles de police TSPL (`printer`) — jamais vérifiées visuellement (imprimante non câblée), point de départ à ajuster.
+- **`-std=gnu++17` ajouté à `[env:esp32s3]` mais n'élimine pas le warning `inline constexpr` d'`mod_table.h`**, même après un rebuild complet (`rm -rf .pio/build/esp32s3`) — probablement un flag `-std=` par défaut de la plateforme `espressif32` placé après le nôtre sur la ligne de commande GCC (le dernier `-std=` gagne). Cosmétique (warning, pas erreur, aucun effet observé sur le fonctionnement), pas creusé davantage cette nuit.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.

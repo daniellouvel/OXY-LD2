@@ -5,44 +5,51 @@
 
 #include "led_status.h"
 
-// Rendu ecran TFT ST7789 (SPI, 240x320). Reglages repris tels quels de
-// HARDWARE.md, confirmes par l'utilisateur comme identiques a la derniere
-// version fonctionnelle d'OXY-LD : tft.init(240,320), invertDisplay(true),
-// setRotation(1) + MADCTL=MV force (corrige un miroir horizontal connu sur
-// ce clone ST7789, cf. HARDWARE.md).
+// Rendu ecran TFT ST7789 (SPI, 320x240 apres rotation). Police et gabarit
+// repris de la derniere version fonctionnelle d'OXY-LD (OXY-LD/src/main.cpp,
+// displayRead()) : polices vectorielles FreeSansBold plutot que la police
+// bitmap standard, technique anti-scintillement par cache de contenu.
 //
-// Ne connait pas la notion de "clignotant" - juste afficher/masquer la
-// valeur O2 sur demande. Le rythme de clignotement (piloter show_measurement
-// avec o2_value_visible qui alterne) est decide par l'appelant (main.cpp),
-// pas par ce module - cf. ARCHITECTURE.md "Retour UI attendu".
-//
-// ECRIT CETTE NUIT, NON VERIFIE VISUELLEMENT AU MOMENT DE L'ECRITURE.
-// Compile avec succes contre les vraies bibliotheques (Adafruit ST7735 and
-// ST7789 Library @ 1.11.0, Adafruit GFX Library @ 1.12.6, verifiees dans
-// .pio/libdeps/esp32s3/) mais jamais flashe ni observe en fonctionnement
-// sur l'ecran reel. A verifier au reveil : l'ecran s'allume, le texte est
-// lisible (pas de miroir, pas de couleurs inversees malgre invertDisplay),
-// positions/tailles de police a ajuster a l'oeil - jamais calibrees.
+// Scintillement constate sur la carte reelle la nuit du 2026-08-09 (meme
+// symptome documente par OXY-LD, qui a des environnements de diagnostic
+// dedies dans son platformio.ini) : un fillRect(noir) suivi d'un redraw a
+// CHAQUE appel, meme quand rien n'a change, produit un flash noir visible
+// sur ce panel. Chaque zone compare son contenu au dernier contenu dessine
+// et saute le fillRect+redraw si identique - meme technique qu'OXY-LD.
 
 class Display {
  public:
   Display();
 
   void begin();
-
-  // Efface l'ecran, affiche un texte de demarrage.
   void show_splash();
 
-  // Affiche O2%, MOD, ppO2 de reference. color pilote la teinte du texte
-  // O2 (vert=stable, orange=en cours, rouge=erreur - cf. led_status.h).
-  // o2_value_visible=false efface uniquement la zone de la valeur O2 (pour
-  // le clignotement pendant la stabilisation) sans toucher au reste.
+  // Force un redraw complet au prochain show_measurement(), malgre le
+  // cache (ex: apres un changement de mode qui a modifie l'ecran ailleurs).
+  void force_redraw();
+
+  // color pilote la teinte du chiffre O2 (vert=stable, orange=en cours,
+  // rouge=erreur - cf. led_status.h). stable pilote le badge "OK"/"..." en
+  // haut a droite (independant du clignotement - le badge ne clignote pas,
+  // comme sur OXY-LD). o2_value_visible=false efface la zone du chiffre O2
+  // sans toucher au reste - pilote le clignotement pendant la
+  // stabilisation (cf. ARCHITECTURE.md "Retour UI attendu"), decide par
+  // l'appelant (main.cpp), pas par ce module.
   void show_measurement(int o2_percent, int mod_meters, float ppo2_setpoint,
-                        RgbColor color, bool o2_value_visible);
+                        RgbColor color, bool stable, bool o2_value_visible);
 
  private:
-  static uint16_t to_rgb565(RgbColor c);
+  void center_text(const char* s, int16_t y, const GFXfont* font, uint16_t color);
 
   SPIClass spi_;
   Adafruit_ST7789 tft_;
+  bool force_redraw_ = true;
+
+  // Cache du dernier contenu dessine par zone - cf. commentaire de classe.
+  char prev_o2_text_[8] = "";
+  uint16_t prev_o2_color_ = 0xFFFF;
+  bool prev_badge_shown_ = false;
+  bool prev_badge_stable_ = false;
+  char prev_mod_text_[24] = "";
+  char prev_ppo2_text_[16] = "";
 };

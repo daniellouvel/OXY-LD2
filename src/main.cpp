@@ -23,7 +23,7 @@
 //    uint32_t now_ms brut, agnostique de la source)
 //  - pas de compensation thermique (apply_thermal_compensation() non
 //    appelee - has_temperature() resterait de toute facon faux)
-//  - ppO2 fixe en dur a 1.4 (pas de bouton pour la choisir)
+//  - ppO2 fixe en dur a 1.6 (pas de bouton pour la choisir)
 //
 // Calibration : pas de bouton pour declencher une vraie calibration.
 // Auto-calibration NAIVE sur la toute premiere lecture valide au
@@ -47,14 +47,14 @@ CalibrationTracker calibration(5.0f, 15.0f);
 StabilityConfig stability_config{0.02f, 0.3f, 5000, 3000, 10000};
 StabilityTracker stability(stability_config);
 
-constexpr float kPpo2Setpoint = 1.4f;  // fixe - pas de bouton cable ce soir
-constexpr PPO2Setpoint kPpo2SetpointEnum = PPO2Setpoint::P14;  // doit rester coherent avec kPpo2Setpoint
+constexpr float kPpo2Setpoint = 1.6f;  // fixe - pas de bouton cable ce soir
+constexpr PPO2Setpoint kPpo2SetpointEnum = PPO2Setpoint::P16;  // doit rester coherent avec kPpo2Setpoint
 
 bool ads_ok = false;
 
 void show_error() {
   RgbColor c = led_status_for(SystemState::Error).color;
-  display.show_measurement(0, -1, kPpo2Setpoint, c, true);
+  display.show_measurement(0, -1, kPpo2Setpoint, c, /*stable=*/false, /*o2_value_visible=*/true);
 }
 
 }  // namespace
@@ -111,7 +111,8 @@ void loop() {
   // fixe une fois stable - cf. ARCHITECTURE.md "Retour UI attendu".
   bool o2_visible = stability.is_stable() || ((now / 500) % 2 == 0);
 
-  display.show_measurement(o2_display, mod, kPpo2Setpoint, led.color, o2_visible);
+  display.show_measurement(o2_display, mod, kPpo2Setpoint, led.color, stability.is_stable(),
+                            o2_visible);
 
   // Diagnostic serie periodique (1x/s) - ajoute pour verifier reellement le
   // pipeline cette nuit, pas seulement l'absence de crash. A retirer ou
