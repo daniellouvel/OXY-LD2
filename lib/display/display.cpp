@@ -3,6 +3,7 @@
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
+#include <Fonts/Picopixel.h>
 
 #include <cstdio>
 #include <cstring>
@@ -193,6 +194,10 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
   // "0%" rouge le laissait deviner indirectement via l'etat d'erreur).
   // Taille reduite (120x30 -> 90x22) suite a un second retour utilisateur -
   // le badge d'origine etait trop imposant une fois visible sur la carte.
+  // Police reduite (FreeSansBold9pt7b, deja la plus petite police vectorielle
+  // du projet -> Picopixel, police pixel dediee aux petites etiquettes,
+  // bundlee avec Adafruit GFX) suite a un troisieme retour - demande
+  // explicite de police plus petite, pas seulement de boite plus petite.
   if (force || calibrated != prev_cal_badge_calibrated_ || !prev_cal_badge_shown_) {
     prev_cal_badge_shown_ = true;
     prev_cal_badge_calibrated_ = calibrated;
@@ -201,7 +206,7 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     uint16_t cal_col = calibrated ? ST77XX_GREEN : ST77XX_RED;
     tft_.fillRoundRect(cx + 2, cy + 2, cw - 4, ch - 4, 5, cal_col);
     const char* txt = calibrated ? "CALIBRE" : "NON CAL";
-    tft_.setFont(&FreeSansBold9pt7b);
+    tft_.setFont(&Picopixel);
     tft_.setTextSize(1);
     int16_t cx1, cy1;
     uint16_t cw1, ch1;
