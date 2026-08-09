@@ -12,7 +12,7 @@ Repris tel quel du matériel documenté dans `OXY-LD` (station de paillasse, ali
 |---|---|---|
 | ESP32-S3-WROOM-1 (N16R2) | MCU principal | 16 MB flash, PSRAM QSPI |
 | ADS1115 (I2C, 0x48) | ADC 16 bits | gain ×16 (`GAIN_SIXTEEN`, ±256 mV, LSB 7.8 µV), alimentation 3.3 V |
-| Écran TFT SPI 240×320 (ST7789) | Affichage | pas de tactile, pas de MISO câblé |
+| Écran TFT SPI 240×320 (ST7789) | Affichage | **Confirmé** — driver et réglages corrects sur la dernière version d'OXY-LD (`tft.init(240,320)`, `invertDisplay(true)`, `setRotation(1)` + `MADCTL=MV`) ; pas de tactile, pas de MISO câblé |
 | RTC PCF8563T/5,518 (I2C, 0x51) | Horodatage | **Confirmé** — même référence que sur OXY-LD (résout l'incohérence PCF8563/DS3231/DS1307 entre les docs OXY-LD ; DS3231/DS1307 étaient des mentions obsolètes d'anciennes révisions) |
 | 3× TTP223 | Boutons tactiles | sortie HIGH quand touché (jumper A par défaut) |
 | Imprimante TSC TH240 | Étiqueteuse thermique | UART2, 115 200 bauds, TSPL ; RS-232 → MAX3232 obligatoire (pas MAX232, 5V) |
@@ -50,5 +50,4 @@ Repris tel quel du matériel documenté dans `OXY-LD` (station de paillasse, ali
 ## À reconfirmer avant implémentation
 
 - [x] Référence exacte du RTC — **PCF8563T/5,518**, confirmé identique à OXY-LD
-- [ ] Driver écran définitif (ST7789 confirmé sur OXY-LD après un essai ILI9341 raté — probable mais à revalider sur le module réel)
-- [ ] Orientation TFT et inversion couleurs (spécifiques au clone monté — `setRotation()` et `invertDisplay()` à recalibrer empiriquement, comme sur OXY-LD)
+- [x] Driver écran et orientation/inversion couleurs — **confirmés corrects sur la dernière version d'OXY-LD**, à reprendre tels quels (`ST7789`, `invertDisplay(true)`, `setRotation(1)` + `MADCTL=MV`)
