@@ -191,10 +191,12 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
   // clignotement et du message temporaire ci-dessus. Retour utilisateur :
   // rien n'indiquait l'etat de calibration sur l'ecran physique (seul un
   // "0%" rouge le laissait deviner indirectement via l'etat d'erreur).
+  // Taille reduite (120x30 -> 90x22) suite a un second retour utilisateur -
+  // le badge d'origine etait trop imposant une fois visible sur la carte.
   if (force || calibrated != prev_cal_badge_calibrated_ || !prev_cal_badge_shown_) {
     prev_cal_badge_shown_ = true;
     prev_cal_badge_calibrated_ = calibrated;
-    constexpr int16_t cx = 200, cy = 208, cw = 120, ch = 30;
+    constexpr int16_t cx = 224, cy = 212, cw = 90, ch = 22;
     tft_.fillRect(cx, cy, cw, ch, ST77XX_BLACK);
     uint16_t cal_col = calibrated ? ST77XX_GREEN : ST77XX_RED;
     tft_.fillRoundRect(cx + 2, cy + 2, cw - 4, ch - 4, 5, cal_col);
