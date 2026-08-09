@@ -7,3 +7,6 @@ Bibliothèques privées PlatformIO, une par responsabilité matérielle ou fonct
 - `o2_sensor/` — conversion tension→%O2, compensation thermique (coefficient non assumé, à sourcer), filtre anti-glitch médiane-de-3. Testé en `native`. Lecture ADS1115 réelle volontairement absente d'ici (module matériel séparé, à écrire au câblage).
 - `calibration/` — état de calibration (tension à l'air, température optionnelle via `NAN`), historique circulaire pour détecter une dérive de cellule. Persistance flash déléguée à `storage`. Testé en `native`.
 - `storage/` — sérialisation versionnée + checksum du dernier point de calibration (17 octets). Écriture flash réelle (NVS) volontairement absente d'ici, comme le driver ADS1115. Testé en `native`.
+- `printer/` — génération de la commande TSPL de l'étiquette (cas simple, sans badge). Positions/police non vérifiées visuellement (pas d'imprimante câblée). Testé en `native`.
+- `led_status/` — table pure état→couleur/clignotement, pas d'appel matériel. Testé en `native`.
+- `buttons/` — détection appui court/long, appui long détecté pendant le maintien (pas au relâchement). Lecture TTP223 réelle non incluse (non câblés). Testé en `native`.

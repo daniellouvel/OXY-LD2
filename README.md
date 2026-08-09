@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Cinq modules implémentés et testés (`mod_calc`, `stability`, `o2_sensor` — partie pure, `calibration`, `storage` — sérialisation calibration seule). Le reste du firmware reste à écrire module par module.
+> **Statut : en cours.** Huit modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor` — partie pure, `calibration`, `storage` — sérialisation calibration seule, `printer`, `led_status`, `buttons`). Les modules matériels (ADS1115, TFT) sont en cours d'intégration réelle sur la carte câblée.
 
 ---
 
@@ -29,13 +29,19 @@ OXY-LD2/
 │   ├── stability/         Détection de stabilité (pente lissée EMA)
 │   ├── o2_sensor/         Conversion tension→%O2, compensation thermique, filtre anti-glitch
 │   ├── calibration/       État de calibration (air, température optionnelle), vieillissement cellule
-│   └── storage/           Sérialisation versionnée de la calibration (checksum, détection flash vierge)
+│   ├── storage/           Sérialisation versionnée de la calibration (checksum, détection flash vierge)
+│   ├── printer/           Génération étiquette TSPL
+│   ├── led_status/        Table état→couleur/clignotement LED
+│   └── buttons/           Détection appui court/long
 ├── test/                 Tests unitaires PlatformIO (pio test -e native)
 │   ├── test_mod_calc/
 │   ├── test_stability/
 │   ├── test_o2_sensor/
 │   ├── test_calibration/
-│   └── test_storage/
+│   ├── test_storage/
+│   ├── test_printer/
+│   ├── test_led_status/
+│   └── test_buttons/
 ├── tools/
 │   └── generate_mod_table.py   Génère les tables de lib/mod_calc/mod_table.cpp
 ├── docs/

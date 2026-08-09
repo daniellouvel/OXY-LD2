@@ -18,9 +18,9 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | `storage` ✅ | Sérialisation versionnée de la calibration — **partiellement implémenté**, voir ci-dessous. Écriture flash réelle (NVS) reportée. Historique complet et réglages pas encore couverts |
 | `rtc_clock` | Horodatage RTC |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
-| `printer` | Génération étiquette TSPL, envoi UART |
-| `led_status` | Codes couleur LED d'état |
-| `buttons` | Lecture boutons TTP223, détection appui court/long |
+| `printer` ✅ | Génération étiquette TSPL — **implémenté**, voir ci-dessous. Envoi UART reporté (imprimante non câblée) |
+| `led_status` ✅ | Codes couleur LED d'état — **implémenté**, voir ci-dessous. Rendu NeoPixel réel non inclus |
+| `buttons` ✅ | Détection appui court/long — **implémenté**, voir ci-dessous. Lecture TTP223 réelle non incluse (boutons non câblés) |
 | `web_ui` | Point d'accès WiFi + serveur web |
 
 Chaque module ne connaît que son propre matériel — `o2_sensor` ignore l'existence de l'écran, `display` ignore l'ADS1115. Le fichier `src/main.cpp` orchestre, sans logique métier propre.
@@ -86,6 +86,28 @@ Persistance flash **non incluse ici** — `calibrate()` ne fait qu'une gestion d
 L'écriture flash réelle (`Preferences.putBytes()`/`getBytes()`) n'est pas incluse — même raison que le driver ADS1115 : non vérifiable sans matériel, reportée au câblage.
 
 6 tests unitaires (`test/test_storage`) : aller-retour avec/sans température, version incompatible, checksum corrompu, flash vierge (`0xFF`).
+
+### `printer` — implémenté
+
+`build_label_tspl()` (`lib/printer/label.h`) : génère la commande TSPL complète pour l'étiquette (cas simple sans badge RFID — `rfid_badge` n'existe pas encore). Prend `LabelData` (O2% déjà arrondi, MOD déjà calculée, ppO2, date/heure déjà formatées en chaîne — pas de dépendance RTC ici) et écrit dans un buffer fourni par l'appelant, avec détection explicite de dépassement (retourne 0 plutôt que de tronquer silencieusement).
+
+**Non vérifié visuellement** : les positions/tailles de police TSPL sont un point de départ raisonnable repris du format documenté dans `OXY-LD/README.md`, jamais imprimées pour de vrai (imprimante TSC TH240 non câblée). À ajuster une fois câblée.
+
+4 tests unitaires (`test/test_printer`) : présence des champs attendus, MOD invalide affiché `--` plutôt que `-1 m`, formatage ppO2, buffer trop petit.
+
+### `led_status` — implémenté
+
+`led_status_for(SystemState)` (`lib/led_status/led_status.h`) : table pure état→couleur/clignotement, pas d'appel matériel (ni NeoPixel, ni gestion de luminosité — détails de rendu hors scope). Couleurs reprises du schéma documenté dans `OXY-LD/WIRING.md`. Scope volontairement limité à 4 états déterminables par la boucle de mesure de ce soir (`Splash`, `Stabilizing`, `Stable`, `Error`) — pas d'états pour badge/impression/historique/réglage horaire, ces modules n'existent pas encore.
+
+5 tests unitaires (`test/test_led_status`), incluant une vérification que les 4 états ont des couleurs deux-à-deux distinctes (sinon deux états seraient visuellement indiscernables sur la LED).
+
+### `buttons` — implémenté
+
+`ButtonTracker` (`lib/buttons/button.h`) : même schéma temporel que `StabilityTracker` — l'appelant pousse l'état brut (`digitalRead()`) à chaque lecture, le module décide. **Différence de conception assumée** : l'appui long est détecté *pendant* le maintien, au moment où le seuil est franchi (pas au relâchement) — feedback immédiat, et évite qu'un relâchement après appui long ne déclenche en plus un `ShortPress` fantôme.
+
+**Lecture TTP223 réelle non incluse** — boutons non câblés actuellement. `ButtonTracker` est prêt à être branché sur un `digitalRead()` dès que le câblage existe.
+
+6 tests unitaires (`test/test_buttons`) : cycles indépendants (le chrono d'un appui ne doit pas hériter du timing du précédent), non-répétition du `LongPress` tant que maintenu, rollover `millis()`.
 
 ---
 

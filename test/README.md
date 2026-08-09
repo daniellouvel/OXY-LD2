@@ -7,3 +7,6 @@ Tests unitaires PlatformIO (Unity, `pio test -e native`) pour la logique pure : 
 - `test_o2_sensor/` — conversion tension→%O2, compensation thermique, filtre anti-glitch (ordres divers, doublons, buffer roulant).
 - `test_calibration/` — validation de plage, fraîcheur, vieillissement/dérive de cellule, éviction du buffer circulaire, rollover `millis()`.
 - `test_storage/` — aller-retour de sérialisation avec/sans température, rejet version incompatible, checksum corrompu, flash vierge.
+- `test_printer/` — champs attendus dans la commande TSPL, MOD invalide, formatage ppO2, buffer trop petit.
+- `test_led_status/` — couleur/clignotement par état, couleurs deux-à-deux distinctes.
+- `test_buttons/` — cycles indépendants, non-répétition du LongPress, rollover `millis()`.
