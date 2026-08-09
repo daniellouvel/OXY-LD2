@@ -184,6 +184,27 @@ void setup() {
   server.on("/plongee", HTTP_GET, handle_plongee);
   server.on("/tables", HTTP_GET, handle_tables);
   server.on("/ppo2", HTTP_POST, handle_set_ppo2);
+
+  // Ce point d'acces n'a pas d'Internet reel (AP local pur). Sans ces
+  // routes, les telephones (Android/iOS/Windows) interceptent le trafic
+  // web pour verifier la connectivite et bloquent la navigation normale -
+  // symptome constate (retour utilisateur : le telephone se connecte au
+  // WiFi mais n'arrive pas a ouvrir la page, alors qu'un PC y arrive sans
+  // souci). Reprise des routes de contournement d'OXY-LD, qui a le meme
+  // probleme sur le meme type de point d'acces.
+  server.on("/generate_204", HTTP_ANY,
+            [](AsyncWebServerRequest* r) { r->send(204, "text/plain", ""); });
+  server.on("/hotspot-detect.html", HTTP_ANY, [](AsyncWebServerRequest* r) {
+    r->send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
+  });
+  server.on("/library/test/success.html", HTTP_ANY,
+            [](AsyncWebServerRequest* r) { r->send(200, "text/html", "Success"); });
+  server.on("/connecttest.txt", HTTP_ANY,
+            [](AsyncWebServerRequest* r) { r->send(200, "text/plain", "Microsoft Connect Test"); });
+  server.on("/ncsi.txt", HTTP_ANY,
+            [](AsyncWebServerRequest* r) { r->send(200, "text/plain", "Microsoft NCSI"); });
+  server.onNotFound([](AsyncWebServerRequest* r) { r->redirect("/materiel"); });
+
   server.begin();
   Serial.println("Serveur web demarre");
 }
