@@ -176,9 +176,21 @@ void setup() {
     Serial.println("RTC detecte, heure OK");
   }
 
-  WiFi.softAP("OXY-LD2", "plongee24");
-  Serial.print("Point d'acces WiFi OXY-LD2 demarre, IP : ");
-  Serial.println(WiFi.softAPIP());
+  // Parite complete avec la sequence de demarrage AP d'OXY-LD (mode
+  // explicite, IP/passerelle/masque explicites - la passerelle notamment
+  // fait partie de ce que le telephone evalue pour juger si le reseau a
+  // "Internet" - puis softAP avec canal/visibilite/max connexions) : les
+  // deux premieres tentatives (routes HTTP seules, puis DNS seul sans
+  // cette config) n'ont pas suffi pour le telephone de l'utilisateur.
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1),
+                     IPAddress(255, 255, 255, 0));
+  bool ap_ok = WiFi.softAP("OXY-LD2", "plongee24", /*channel=*/6, /*hidden=*/false,
+                            /*max_connection=*/4);
+  Serial.printf("Point d'acces WiFi OXY-LD2 %s, IP : %s\n", ap_ok ? "OK" : "ECHEC",
+                WiFi.softAPIP().toString().c_str());
+
+  delay(200);  // laisse le temps a l'interface AP d'etre prete avant DNS (cf. OXY-LD)
 
   // Repond a TOUS les noms de domaine avec l'IP de la carte - necessaire
   // pour que la verification de connectivite des telephones (qui resout
