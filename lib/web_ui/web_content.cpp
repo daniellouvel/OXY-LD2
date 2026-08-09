@@ -24,7 +24,6 @@ const char* kStyle =
     ".status-ok{color:#4caf50;font-weight:bold}.status-bad{color:#e53935;font-weight:bold}"
     "button,select{font-size:1rem;padding:6px 10px}"
     "p{font-size:1.1rem}"
-    ".cal-status{display:block;margin-top:6px;font-size:.8rem;font-weight:normal;opacity:.85}"
     ".hint{font-size:.85rem;color:#888}";
 
 }  // namespace
@@ -94,8 +93,11 @@ std::string build_dive_page(const DiveStatus& status) {
   body += "<form method=\"POST\" action=\"/calibrate\">";
   body += "<button type=\"submit\">Calibrer maintenant</button>";
   body += "</form>";
-  body += status.calibrated ? "<div class=\"cal-status status-ok\">calibre</div>"
-                             : "<div class=\"cal-status status-bad\">non calibre</div>";
+  // Meme gabarit que la ligne Stabilite ci-dessus (retour utilisateur :
+  // "doit avoir la meme fonte que stabilite") - <p> + <span class="status-*">
+  // au lieu du style reduit/discret precedent.
+  body += status.calibrated ? "<p>Etat : <span class=\"status-ok\">calibre</span></p>"
+                             : "<p>Etat : <span class=\"status-bad\">non calibre</span></p>";
   body +=
       "<p class=\"hint\">Exposer la cellule a l'air ambiant et attendre que la stabilite passe "
       "a OK AVANT de cliquer - une demande faite pendant que la mesure bouge encore est ignoree "
