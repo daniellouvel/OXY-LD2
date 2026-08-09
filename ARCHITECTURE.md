@@ -96,6 +96,10 @@ Signatures API vérifiées dans les vraies bibliothèques (`Adafruit ST7735 and 
 
 **ppO2 par défaut changé de 1.4 à 1.6** (demande explicite) — `mod_lookup` avec `PPO2Setpoint::P16`, vérifié par log série (`o2=21 mod=66`, correspond exactement à la valeur validée contre la table du club).
 
+**Correction taille/fond suite au retour utilisateur** ("bon sens, léger scintillement" après le premier flash de ce matin) :
+- **Taille du grand chiffre O2** : la première version appelait `center_text()` avec un `setTextSize(1)` codé en dur, alors qu'OXY-LD affiche ce chiffre précis à `setTextSize(2)` sur la police déjà la plus grande (`FreeSansBold24pt7b`) pour remplir l'espace disponible. `center_text()` prend maintenant un paramètre `scale` (défaut 1), utilisé à 2 uniquement pour ce chiffre — `y=48` repris exactement de la position vérifiée d'OXY-LD (`numTopY` dans `OXY-LD/src/main.cpp`), pas une valeur inventée.
+- **Fond noir** : posé explicitement dans `begin()` (`tft_.fillScreen(ST77XX_BLACK)` juste après le réglage MADCTL), pas seulement comme conséquence indirecte de `show_splash()`.
+
 ### `calibration` — implémenté
 
 `CalibrationTracker` : tension à l'air + température **optionnelle** (sentinelle `NAN`, cohérent avec le reste du code — pas `std::optional`, portabilité ESP32/Arduino incertaine). Le DS18B20 étant explicitement optionnel dans HARDWARE.md, la température ne peut pas être un paramètre obligatoire. `has_temperature()` distingue "pas calibré" de "calibré sans sonde".

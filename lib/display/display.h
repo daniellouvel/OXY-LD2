@@ -39,7 +39,12 @@ class Display {
                         RgbColor color, bool stable, bool o2_value_visible);
 
  private:
-  void center_text(const char* s, int16_t y, const GFXfont* font, uint16_t color);
+  // scale=1 pour la plupart des textes ; le grand chiffre O2 utilise
+  // scale=2 sur la police deja la plus grande (FreeSansBold24pt7b) pour
+  // remplir l'espace disponible - meme technique qu'OXY-LD (voir son
+  // commentaire "le chiffre est affiche a l'echelle 2 pour la remplir").
+  void center_text(const char* s, int16_t y, const GFXfont* font, uint16_t color,
+                   uint8_t scale = 1);
 
   SPIClass spi_;
   Adafruit_ST7789 tft_;

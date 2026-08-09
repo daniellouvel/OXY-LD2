@@ -31,13 +31,18 @@ void Display::begin() {
   // seul, sans toucher au sens haut/bas deja correct via setRotation(1).
   uint8_t madctl = ST77XX_MADCTL_MV;
   tft_.sendCommand(ST77XX_MADCTL, &madctl, 1);
+
+  // Fond noir pose explicitement des l'initialisation - couleur de fond
+  // reprise d'OXY-LD, pas seulement une consequence indirecte du splash.
+  tft_.fillScreen(ST77XX_BLACK);
 }
 
 void Display::force_redraw() { force_redraw_ = true; }
 
-void Display::center_text(const char* s, int16_t y, const GFXfont* font, uint16_t color) {
+void Display::center_text(const char* s, int16_t y, const GFXfont* font, uint16_t color,
+                          uint8_t scale) {
   tft_.setFont(font);
-  tft_.setTextSize(1);
+  tft_.setTextSize(scale);
   tft_.setTextColor(color);
   int16_t x1, y1;
   uint16_t w, h;
@@ -75,7 +80,11 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     prev_o2_color_ = o2_color;
     tft_.fillRect(0, 30, kScreenW, 118, ST77XX_BLACK);
     if (o2_text[0] != '\0') {
-      center_text(o2_text, 100, &FreeSansBold24pt7b, o2_color);
+      // scale=2, y=48 : reprend exactement la taille et la position
+      // d'affichage d'OXY-LD pour le grand chiffre (numTopY dans
+      // OXY-LD/src/main.cpp) - la police FreeSansBold24pt7b (deja la plus
+      // grande disponible) est doublee pour remplir l'espace disponible.
+      center_text(o2_text, 48, &FreeSansBold24pt7b, o2_color, /*scale=*/2);
     }
   }
 
