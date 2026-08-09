@@ -32,9 +32,13 @@ void Display::begin() {
   tft_.invertDisplay(false);
   tft_.setRotation(1);
 
-  // Corrige un miroir horizontal connu sur ce clone ST7789 - MADCTL=MV
-  // seul, sans toucher au sens haut/bas deja correct via setRotation(1).
-  uint8_t madctl = ST77XX_MADCTL_MV;
+  // Corrige un miroir horizontal connu sur ce clone ST7789 - MADCTL=MV.
+  // + bit BGR (0x08, pas de constante nommee dans cette bibliotheque - seul
+  // ST77XX_MADCTL_RGB=0x00 existe) : retour utilisateur, le rouge
+  // s'affichait bleu (et inversement) - symptome classique d'ordre de
+  // canaux couleur inverse sur les clones ST7789, distinct du probleme de
+  // miroir (MV) et du fond noir (invertDisplay) deja corriges separement.
+  uint8_t madctl = ST77XX_MADCTL_MV | 0x08;
   tft_.sendCommand(ST77XX_MADCTL, &madctl, 1);
 
   // Fond noir pose explicitement des l'initialisation - couleur de fond

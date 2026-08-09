@@ -142,9 +142,10 @@ void loop() {
   SystemState state = stability.is_stable() ? SystemState::Stable : SystemState::Stabilizing;
   LedStatusOutput led = led_status_for(state);
 
-  // Clignotement pendant la stabilisation (fenetre de 500ms sur millis()),
-  // fixe une fois stable - cf. ARCHITECTURE.md "Retour UI attendu".
-  bool o2_visible = stability.is_stable() || ((now / 500) % 2 == 0);
+  // Clignotement pendant la stabilisation (fenetre de 800ms sur millis(),
+  // ralenti depuis 500ms sur retour utilisateur), fixe une fois stable -
+  // cf. ARCHITECTURE.md "Retour UI attendu".
+  bool o2_visible = stability.is_stable() || ((now / 800) % 2 == 0);
 
   display.show_measurement(o2_display, mod, kPpo2Setpoint, led.color, stability.is_stable(),
                             o2_visible);
