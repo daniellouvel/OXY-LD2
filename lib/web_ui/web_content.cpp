@@ -23,7 +23,9 @@ const char* kStyle =
     "th{background:#222}td:first-child,th:first-child{text-align:left}"
     ".status-ok{color:#4caf50;font-weight:bold}.status-bad{color:#e53935;font-weight:bold}"
     "button,select{font-size:1rem;padding:6px 10px}"
-    "p{font-size:1.1rem}";
+    "p{font-size:1.1rem}"
+    ".cal-status{font-size:.8rem;font-weight:normal;margin-left:10px;opacity:.85}"
+    ".hint{font-size:.85rem;color:#888}";
 
 }  // namespace
 
@@ -89,18 +91,15 @@ std::string build_dive_page(const DiveStatus& status) {
   }
 
   body += "<h2>Calibration</h2>";
-  body += "<p>Etat : ";
-  body += status.calibrated ? "<span class=\"status-ok\">calibre</span>"
-                             : "<span class=\"status-bad\">non calibre</span>";
-  body += "</p>";
   body += "<form method=\"POST\" action=\"/calibrate\">";
   body += "<button type=\"submit\">Calibrer maintenant</button>";
+  body += status.calibrated ? "<span class=\"cal-status status-ok\">calibre</span>"
+                             : "<span class=\"cal-status status-bad\">non calibre</span>";
   body += "</form>";
   body +=
-      "<p style=\"font-size:.9rem;color:#aaa\">Exposer la cellule a l'air ambiant et attendre "
-      "que la stabilite passe a OK AVANT de cliquer - une demande faite pendant que la mesure "
-      "bouge encore est ignoree silencieusement (pas de file d'attente), reessayer une fois "
-      "stable.</p>";
+      "<p class=\"hint\">Exposer la cellule a l'air ambiant et attendre que la stabilite passe "
+      "a OK AVANT de cliquer - une demande faite pendant que la mesure bouge encore est ignoree "
+      "silencieusement (pas de file d'attente), reessayer une fois stable.</p>";
 
   return page_shell("Plongee", body);
 }

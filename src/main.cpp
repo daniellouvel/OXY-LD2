@@ -176,6 +176,7 @@ void handle_plongee(AsyncWebServerRequest* request) {
     d.mod_meters = g_state.mod_meters;
     d.stable = g_state.stable;
     d.ppo2_setpoint = g_state.ppo2_setpoint;
+    d.calibrated = g_state.calibrated;
     xSemaphoreGive(g_mutex);
   }
   request->send(200, "text/html", build_dive_page(d).c_str());
