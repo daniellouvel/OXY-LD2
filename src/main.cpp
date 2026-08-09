@@ -82,18 +82,23 @@ uint32_t g_last_calibration_ts = 0;  // secondes Unix, pour la serialisation fla
 bool auto_cal_armed = false;
 constexpr uint32_t kMinRestSeconds = 24u * 3600u;  // 24h, comme OXY-LD
 
-// Pente en mV/s (pas %O2/s, cf. commentaire d'en-tete). Premiere valeur
-// (0.01) mise a l'echelle depuis l'ancien seuil %O2/s par un facteur de
-// conversion suppose - jamais atteignable en pratique : observe en direct
-// sur la carte reelle que le bruit ambiant de cette cellule (cellule non
-// exposee a un changement de gaz, juste assise sur la paillasse) oscille
-// deja entre 0.02 et 0.4 mV/s en continu, bien au-dessus de 0.01 - la
-// stabilite ne se declenchait donc jamais. Remonte a 0.5, valeur ancree
-// sur le bruit reellement observe (pas une extrapolation), mais toujours
-// pas verifiee pour distinguer un vrai changement de gaz du bruit - a
-// affiner en soufflant/couvrant la cellule pour de vrai (pas possible a
-// distance).
-StabilityConfig stability_config{0.5f, 0.3f, 5000, 3000, 10000};
+// Pente en mV/s (pas %O2/s, cf. commentaire d'en-tete).
+// Historique : 0.01 (extrapolation de l'ancien seuil %O2/s) jamais
+// atteignable -> 0.5 (ancre sur le plafond de bruit observe, 0.02-0.4
+// mV/s) atteignable mais NE TIENT PAS (retour utilisateur, confirme dans
+// mes propres logs : stable=1 quelques secondes puis retombe a 0) - le
+// seuil etait trop proche du plafond de bruit reel, pas assez de marge.
+// Deux ajustements combines cette fois :
+//  - alpha 0.3 -> 0.1 : lissage EMA de la pente nettement plus fort,
+//    reduit la sensibilite au bruit instantane plutot que de juste
+//    deplacer le seuil (le seuil seul ne peut pas compenser un signal
+//    bruite, il faut aussi lisser le signal lui-meme).
+//  - seuil 0.5 -> 0.6 mV/s : marge au-dessus du plafond de bruit observe
+//    plutot que colle dessus.
+// Toujours pas verifie pour distinguer un vrai changement de gaz du bruit
+// - a affiner en soufflant/couvrant la cellule pour de vrai (pas possible
+// a distance). A revoir si la stabilite ne tient toujours pas.
+StabilityConfig stability_config{0.6f, 0.1f, 5000, 3000, 10000};
 StabilityTracker stability(stability_config);
 
 uint32_t calibration_clock() {
