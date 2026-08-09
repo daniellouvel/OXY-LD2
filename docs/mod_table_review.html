@@ -1,0 +1,406 @@
+<title>OXY-LD2 — Table MOD Nitrox (revue)</title>
+<!--
+  Archive locale de la revue de validation de la table MOD.
+  Source club comparée : table.png (Franck Gentili / sommeildesepaves.com, ppO2=1.6, 22-99%).
+  Valeurs figées dans lib/mod_calc/mod_table.cpp - ce fichier est la trace d'audit, pas la source de verite.
+-->
+<style>
+  :root {
+    --bg: #eef3f5;
+    --surface: #ffffff;
+    --surface-alt: #f3f8f9;
+    --ink: #0f2630;
+    --muted: #5c7480;
+    --hair: #d7e2e5;
+    --accent: #0e7490;
+    --accent-soft: #d9edf1;
+    --warn: #b45309;
+    --warn-soft: #fdecd2;
+    --font-body: ui-sans-serif, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #071216;
+      --surface: #0d1b21;
+      --surface-alt: #10222a;
+      --ink: #e7f1f4;
+      --muted: #85a0aa;
+      --hair: #1c343c;
+      --accent: #4fc3e0;
+      --accent-soft: #123a44;
+      --warn: #f2a53c;
+      --warn-soft: #2c2010;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #071216;
+    --surface: #0d1b21;
+    --surface-alt: #10222a;
+    --ink: #e7f1f4;
+    --muted: #85a0aa;
+    --hair: #1c343c;
+    --accent: #4fc3e0;
+    --accent-soft: #123a44;
+    --warn: #f2a53c;
+    --warn-soft: #2c2010;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.55;
+    margin: 0;
+    padding: 48px 20px 80px;
+    display: flex;
+    justify-content: center;
+  }
+
+  main {
+    width: 100%;
+    max-width: 1180px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  main > header,
+  main > .callout,
+  main > .checks,
+  main > footer {
+    max-width: 760px;
+  }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom: 1px solid var(--hair);
+    padding-bottom: 24px;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 60ch;
+  }
+
+  .formula {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    background: var(--surface-alt);
+    border: 1px solid var(--hair);
+    border-radius: 6px;
+    padding: 10px 14px;
+    width: fit-content;
+    color: var(--ink);
+  }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .callout.warn {
+    border-left-color: var(--warn);
+  }
+
+  .callout h2 {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .callout.warn h2 {
+    color: var(--warn);
+  }
+
+  .callout p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+
+  .callout p.muted {
+    color: var(--muted);
+  }
+
+  .callout code {
+    font-family: var(--font-mono);
+    background: var(--accent-soft);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+
+  .callout.warn code {
+    background: var(--warn-soft);
+  }
+
+  .checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .checks strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .table-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  @media (max-width: 920px) {
+    .table-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .table-grid { grid-template-columns: 1fr; }
+  }
+
+  .table-grid table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  thead th {
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--hair);
+    text-align: right;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    padding: 10px 14px;
+  }
+
+  thead th:first-child { text-align: left; }
+  thead th.p16 { color: var(--warn); }
+
+  tbody td {
+    padding: 9px 14px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--surface-alt); }
+
+  td.o2 {
+    text-align: left;
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 0.95rem;
+  }
+
+  td.o2 .pct {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 0.8em;
+  }
+
+  td.mod { color: var(--ink); }
+  td.mod.p16 { color: var(--accent); font-weight: 700; }
+
+  .tag {
+    font-family: var(--font-body);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+
+  footer {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--hair);
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">OXY-LD2 — lib/mod_calc</span>
+    <h1>Table MOD Nitrox — revue avant intégration</h1>
+    <p class="subtitle">80 lignes (O2 21–100 %) × 2 réglages ppO2, générées par script — pas transcrites à la main. À valider avant de figer les valeurs dans <code style="font-family:var(--font-mono)">mod_table.cpp</code>.</p>
+    <div class="formula">MOD(m) = ⌊ ((ppO2 / (fO2/100)) − 1) × 10 ⌋ &nbsp;·&nbsp; troncature vers le bas (jamais vers le haut)</div>
+  </header>
+
+  <div class="callout">
+    <h2>Méthode</h2>
+    <p>Aucune table numérique officielle FFESSM n'existe — leur manuel de formation (mai 2024) enseigne le calcul, pas une table figée. Ces valeurs sont générées par la formule standard puis <strong>tronquées vers le bas</strong> (jamais arrondies, jamais vers le haut) : direction conservatrice, la profondeur affichée est toujours ≤ à la MOD réelle.</p>
+  </div>
+
+  <div class="callout" style="border-left-color:#2f9e44">
+    <h2 style="color:#2f9e44">Validée contre la table du club</h2>
+    <p>La table réellement utilisée par le club (F. Gentili / sommeildesepaves.com — pas un document FFESSM officiel) a été comparée ligne par ligne à la colonne <strong>MOD@1.6</strong> : <strong>78/78 valeurs identiques</strong> (22–99 %), y compris les cas groupés (46-47 %→24 m, 49-50 %→22 m).</p>
+    <p class="muted">Cette table du club ne couvre que ppO2=1.6 — pas de colonne 1.4, et elle commence à 22 % (pas de ligne 21 % ni 100 %). La colonne MOD@1.4 et les lignes 21 %/100 % restent donc formule seule, non recoupées avec un document indépendant.</p>
+  </div>
+
+  <div class="callout warn">
+    <h2>Bug flottant trouvé en générant cette table</h2>
+    <p>Le calcul brut en <code>float</code> plaçait certaines valeurs pile sur un entier (ex. 28 % → 40,0 m exact) une valeur en dessous (<code>39.999999999</code> → troncature à 39) à cause de l'imprécision binaire de 1.4/0.28. Corrigé ici par une tolérance <code>+1e-9</code> avant troncature — sans jamais pouvoir faire remonter une vraie valeur non-entière au palier supérieur (marge bien trop petite pour ça). Cette correction devra être reprise telle quelle dans le générateur final, sinon quelques MOD seront affichées 1 m plus prudentes que nécessaire — pas dangereux, mais incohérent avec la table de référence.</p>
+  </div>
+
+  <div class="checks">
+    <span><strong>21 %</strong> (air) — 56 m / 66 m</span>
+    <span><strong>32 %</strong> (EAN32) — 33 m / 40 m</span>
+    <span><strong>100 %</strong> (O2 pur) — 4 m / 6 m</span>
+  </div>
+
+  <div class="table-grid">
+<!-- chunk 0: 21-40% -->
+<table><thead><tr><th>O2 %</th><th>1.4</th><th class="p16">1.6 &#10003;</th></tr></thead><tbody>
+<tr><td class="o2">21<span class="pct">%</span><span class="tag">AIR</span></td><td class="mod">56</td><td class="mod p16">66</td></tr>
+<tr><td class="o2">22<span class="pct">%</span></td><td class="mod">53</td><td class="mod p16">62</td></tr>
+<tr><td class="o2">23<span class="pct">%</span></td><td class="mod">50</td><td class="mod p16">59</td></tr>
+<tr><td class="o2">24<span class="pct">%</span></td><td class="mod">48</td><td class="mod p16">56</td></tr>
+<tr><td class="o2">25<span class="pct">%</span></td><td class="mod">46</td><td class="mod p16">54</td></tr>
+<tr><td class="o2">26<span class="pct">%</span></td><td class="mod">43</td><td class="mod p16">51</td></tr>
+<tr><td class="o2">27<span class="pct">%</span></td><td class="mod">41</td><td class="mod p16">49</td></tr>
+<tr><td class="o2">28<span class="pct">%</span></td><td class="mod">40</td><td class="mod p16">47</td></tr>
+<tr><td class="o2">29<span class="pct">%</span></td><td class="mod">38</td><td class="mod p16">45</td></tr>
+<tr><td class="o2">30<span class="pct">%</span></td><td class="mod">36</td><td class="mod p16">43</td></tr>
+<tr><td class="o2">31<span class="pct">%</span></td><td class="mod">35</td><td class="mod p16">41</td></tr>
+<tr><td class="o2">32<span class="pct">%</span></td><td class="mod">33</td><td class="mod p16">40</td></tr>
+<tr><td class="o2">33<span class="pct">%</span></td><td class="mod">32</td><td class="mod p16">38</td></tr>
+<tr><td class="o2">34<span class="pct">%</span></td><td class="mod">31</td><td class="mod p16">37</td></tr>
+<tr><td class="o2">35<span class="pct">%</span></td><td class="mod">30</td><td class="mod p16">35</td></tr>
+<tr><td class="o2">36<span class="pct">%</span></td><td class="mod">28</td><td class="mod p16">34</td></tr>
+<tr><td class="o2">37<span class="pct">%</span></td><td class="mod">27</td><td class="mod p16">33</td></tr>
+<tr><td class="o2">38<span class="pct">%</span></td><td class="mod">26</td><td class="mod p16">32</td></tr>
+<tr><td class="o2">39<span class="pct">%</span></td><td class="mod">25</td><td class="mod p16">31</td></tr>
+<tr><td class="o2">40<span class="pct">%</span></td><td class="mod">25</td><td class="mod p16">30</td></tr>
+</tbody></table>
+<!-- chunk 1: 41-60% -->
+<table><thead><tr><th>O2 %</th><th>1.4</th><th class="p16">1.6 &#10003;</th></tr></thead><tbody>
+<tr><td class="o2">41<span class="pct">%</span></td><td class="mod">24</td><td class="mod p16">29</td></tr>
+<tr><td class="o2">42<span class="pct">%</span></td><td class="mod">23</td><td class="mod p16">28</td></tr>
+<tr><td class="o2">43<span class="pct">%</span></td><td class="mod">22</td><td class="mod p16">27</td></tr>
+<tr><td class="o2">44<span class="pct">%</span></td><td class="mod">21</td><td class="mod p16">26</td></tr>
+<tr><td class="o2">45<span class="pct">%</span></td><td class="mod">21</td><td class="mod p16">25</td></tr>
+<tr><td class="o2">46<span class="pct">%</span></td><td class="mod">20</td><td class="mod p16">24</td></tr>
+<tr><td class="o2">47<span class="pct">%</span></td><td class="mod">19</td><td class="mod p16">24</td></tr>
+<tr><td class="o2">48<span class="pct">%</span></td><td class="mod">19</td><td class="mod p16">23</td></tr>
+<tr><td class="o2">49<span class="pct">%</span></td><td class="mod">18</td><td class="mod p16">22</td></tr>
+<tr><td class="o2">50<span class="pct">%</span></td><td class="mod">18</td><td class="mod p16">22</td></tr>
+<tr><td class="o2">51<span class="pct">%</span></td><td class="mod">17</td><td class="mod p16">21</td></tr>
+<tr><td class="o2">52<span class="pct">%</span></td><td class="mod">16</td><td class="mod p16">20</td></tr>
+<tr><td class="o2">53<span class="pct">%</span></td><td class="mod">16</td><td class="mod p16">20</td></tr>
+<tr><td class="o2">54<span class="pct">%</span></td><td class="mod">15</td><td class="mod p16">19</td></tr>
+<tr><td class="o2">55<span class="pct">%</span></td><td class="mod">15</td><td class="mod p16">19</td></tr>
+<tr><td class="o2">56<span class="pct">%</span></td><td class="mod">15</td><td class="mod p16">18</td></tr>
+<tr><td class="o2">57<span class="pct">%</span></td><td class="mod">14</td><td class="mod p16">18</td></tr>
+<tr><td class="o2">58<span class="pct">%</span></td><td class="mod">14</td><td class="mod p16">17</td></tr>
+<tr><td class="o2">59<span class="pct">%</span></td><td class="mod">13</td><td class="mod p16">17</td></tr>
+<tr><td class="o2">60<span class="pct">%</span></td><td class="mod">13</td><td class="mod p16">16</td></tr>
+</tbody></table>
+<!-- chunk 2: 61-80% -->
+<table><thead><tr><th>O2 %</th><th>1.4</th><th class="p16">1.6 &#10003;</th></tr></thead><tbody>
+<tr><td class="o2">61<span class="pct">%</span></td><td class="mod">12</td><td class="mod p16">16</td></tr>
+<tr><td class="o2">62<span class="pct">%</span></td><td class="mod">12</td><td class="mod p16">15</td></tr>
+<tr><td class="o2">63<span class="pct">%</span></td><td class="mod">12</td><td class="mod p16">15</td></tr>
+<tr><td class="o2">64<span class="pct">%</span></td><td class="mod">11</td><td class="mod p16">15</td></tr>
+<tr><td class="o2">65<span class="pct">%</span></td><td class="mod">11</td><td class="mod p16">14</td></tr>
+<tr><td class="o2">66<span class="pct">%</span></td><td class="mod">11</td><td class="mod p16">14</td></tr>
+<tr><td class="o2">67<span class="pct">%</span></td><td class="mod">10</td><td class="mod p16">13</td></tr>
+<tr><td class="o2">68<span class="pct">%</span></td><td class="mod">10</td><td class="mod p16">13</td></tr>
+<tr><td class="o2">69<span class="pct">%</span></td><td class="mod">10</td><td class="mod p16">13</td></tr>
+<tr><td class="o2">70<span class="pct">%</span></td><td class="mod">10</td><td class="mod p16">12</td></tr>
+<tr><td class="o2">71<span class="pct">%</span></td><td class="mod">9</td><td class="mod p16">12</td></tr>
+<tr><td class="o2">72<span class="pct">%</span></td><td class="mod">9</td><td class="mod p16">12</td></tr>
+<tr><td class="o2">73<span class="pct">%</span></td><td class="mod">9</td><td class="mod p16">11</td></tr>
+<tr><td class="o2">74<span class="pct">%</span></td><td class="mod">8</td><td class="mod p16">11</td></tr>
+<tr><td class="o2">75<span class="pct">%</span></td><td class="mod">8</td><td class="mod p16">11</td></tr>
+<tr><td class="o2">76<span class="pct">%</span></td><td class="mod">8</td><td class="mod p16">11</td></tr>
+<tr><td class="o2">77<span class="pct">%</span></td><td class="mod">8</td><td class="mod p16">10</td></tr>
+<tr><td class="o2">78<span class="pct">%</span></td><td class="mod">7</td><td class="mod p16">10</td></tr>
+<tr><td class="o2">79<span class="pct">%</span></td><td class="mod">7</td><td class="mod p16">10</td></tr>
+<tr><td class="o2">80<span class="pct">%</span></td><td class="mod">7</td><td class="mod p16">10</td></tr>
+</tbody></table>
+<!-- chunk 3: 81-100% -->
+<table><thead><tr><th>O2 %</th><th>1.4</th><th class="p16">1.6 &#10003;</th></tr></thead><tbody>
+<tr><td class="o2">81<span class="pct">%</span></td><td class="mod">7</td><td class="mod p16">9</td></tr>
+<tr><td class="o2">82<span class="pct">%</span></td><td class="mod">7</td><td class="mod p16">9</td></tr>
+<tr><td class="o2">83<span class="pct">%</span></td><td class="mod">6</td><td class="mod p16">9</td></tr>
+<tr><td class="o2">84<span class="pct">%</span></td><td class="mod">6</td><td class="mod p16">9</td></tr>
+<tr><td class="o2">85<span class="pct">%</span></td><td class="mod">6</td><td class="mod p16">8</td></tr>
+<tr><td class="o2">86<span class="pct">%</span></td><td class="mod">6</td><td class="mod p16">8</td></tr>
+<tr><td class="o2">87<span class="pct">%</span></td><td class="mod">6</td><td class="mod p16">8</td></tr>
+<tr><td class="o2">88<span class="pct">%</span></td><td class="mod">5</td><td class="mod p16">8</td></tr>
+<tr><td class="o2">89<span class="pct">%</span></td><td class="mod">5</td><td class="mod p16">7</td></tr>
+<tr><td class="o2">90<span class="pct">%</span></td><td class="mod">5</td><td class="mod p16">7</td></tr>
+<tr><td class="o2">91<span class="pct">%</span></td><td class="mod">5</td><td class="mod p16">7</td></tr>
+<tr><td class="o2">92<span class="pct">%</span></td><td class="mod">5</td><td class="mod p16">7</td></tr>
+<tr><td class="o2">93<span class="pct">%</span></td><td class="mod">5</td><td class="mod p16">7</td></tr>
+<tr><td class="o2">94<span class="pct">%</span></td><td class="mod">4</td><td class="mod p16">7</td></tr>
+<tr><td class="o2">95<span class="pct">%</span></td><td class="mod">4</td><td class="mod p16">6</td></tr>
+<tr><td class="o2">96<span class="pct">%</span></td><td class="mod">4</td><td class="mod p16">6</td></tr>
+<tr><td class="o2">97<span class="pct">%</span></td><td class="mod">4</td><td class="mod p16">6</td></tr>
+<tr><td class="o2">98<span class="pct">%</span></td><td class="mod">4</td><td class="mod p16">6</td></tr>
+<tr><td class="o2">99<span class="pct">%</span></td><td class="mod">4</td><td class="mod p16">6</td></tr>
+<tr><td class="o2">100<span class="pct">%</span><span class="tag">O2 PUR</span></td><td class="mod">4</td><td class="mod p16">6</td></tr>
+</tbody></table>
+  </div>
+
+
+  <footer>
+    <span>Généré par script Python à partir de la formule MOD standard, troncature bas, tolérance flottante 1e-9. Aucune valeur saisie à la main.</span>
+    <span>Prochaine étape si ça convient : figer ces 160 valeurs dans <code style="font-family:var(--font-mono)">lib/mod_calc/mod_table.cpp</code> + test unitaire qui régénère la table et compare.</span>
+  </footer>
+</main>

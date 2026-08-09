@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : initialisation.** Le squelette du projet est en place, le firmware reste à écrire module par module.
+> **Statut : en cours.** Premier module implémenté et testé (`mod_calc` — MOD par table statique). Le reste du firmware reste à écrire module par module.
 
 ---
 
@@ -24,13 +24,27 @@ Repris à l'identique d'OXY-LD. Voir [HARDWARE.md](HARDWARE.md) pour le BOM et l
 OXY-LD2/
 ├── src/
 │   └── main.cpp          Point d'entrée firmware
-├── lib/                  Modules privés (un par responsabilité, à créer au fil du développement)
-├── test/                 Tests unitaires PlatformIO (logique pure : calcul MOD, calibration, arrondi...)
+├── lib/                  Modules privés (un par responsabilité)
+│   └── mod_calc/          MOD par table statique + valeur O2 canonique (implémenté)
+├── test/                 Tests unitaires PlatformIO (pio test -e native)
+│   └── test_mod_calc/
+├── tools/
+│   └── generate_mod_table.py   Génère les tables de lib/mod_calc/mod_table.cpp
+├── docs/
+│   └── mod_table_review.html   Revue et validation de la table MOD (vs table du club)
 ├── platformio.ini         Configuration PlatformIO (ESP32-S3-WROOM-1 N16R2)
 ├── ARCHITECTURE.md        Décisions structurantes (modularité, fiabilité, précision)
 ├── HARDWARE.md            BOM + câblage de référence (repris d'OXY-LD)
 └── README.md              Ce fichier
 ```
+
+## Tests
+
+```
+pio test -e native
+```
+
+Nécessite un compilateur hôte (g++/gcc) — pas installé par défaut sur Windows. Si absent : `scoop install gcc` (pas de droits admin requis).
 
 ## Avertissements
 

@@ -12,7 +12,8 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 |---|---|
 | `o2_sensor` | Lecture ADS1115 différentielle, conversion tension → %O2, filtrage |
 | `calibration` | État de calibration (air, cellule), persistance, détection de vieillissement |
-| `mod_calc` | Calcul MOD — logique pure, sans dépendance matérielle |
+| `stability` | Détection de stabilité (critère de pente `\|ΔV/Δt\| < ε`, cf. §2) |
+| `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
 | `display` | Rendu écran TFT (ST7789) |
 | `storage` | Persistance (calibration, historique, réglages) |
 | `rtc_clock` | Horodatage RTC |
@@ -26,6 +27,16 @@ Chaque module ne connaît que son propre matériel — `o2_sensor` ignore l'exis
 
 **Ce qui est pur (sans dépendance Arduino/matériel) doit le rester** : `mod_calc`, la logique d'arrondi, le calcul de compensation thermique. C'est ce qui rend possible le point 2.
 
+### `mod_calc` — premier module implémenté
+
+Contrairement au plan initial (formule calculée au runtime), la MOD est servie par une **table statique** (`lib/mod_calc/mod_table.cpp`, O2 21–100 % × ppO2 1.4/1.6) générée hors-ligne par [`tools/generate_mod_table.py`](tools/generate_mod_table.py) — **aucun calcul flottant dans le chemin critique du firmware**. Décision prise après avoir vérifié que la FFESSM n'édite pas de table numérique officielle (leur manuel enseigne le calcul) : la table est donc générée par script (formule + troncature vers le bas, jamais vers le haut) puis **validée ligne par ligne contre la table papier réellement utilisée par le club** — 78/78 valeurs identiques pour ppO2=1.6 (22–99 %). Détail de la validation : [`docs/mod_table_review.html`](docs/mod_table_review.html).
+
+Piège rencontré et corrigé : un `ppo2` en `float` (32 bits) au lieu de `double` décale certaines lignes de 1 m par imprécision de représentation binaire (ex. 1.4/0.25 attendu 46.0 exact, obtenu 45.999...). Le générateur Python et le test de cohérence (`test/test_mod_calc`) utilisent tous les deux du `double` pour rester identiques bit à bit.
+
+`o2_display_value()` (`lib/mod_calc/o2_value.h`) fournit la valeur O2 canonique utilisée partout en aval (affichage, étiquette, clé de la table MOD) : **toujours un entier, toujours arrondi vers le haut**, non configurable — contrairement à OXY-LD qui proposait aucun/↑/↓. Arrondir vers le haut est la direction conservatrice pour la MOD (plus d'O2 mesuré ⇒ MOD plus courte).
+
+Tests (`pio test -e native`) : bornes de la table, concordance avec la table du club, cohérence table/formule génératrice, arrondi O2. **Note environnement** : `pio test -e native` nécessite un compilateur hôte (g++/gcc) — absent par défaut sur cette machine Windows (seule la toolchain croisée ESP32-S3 était présente). Installé via `scoop install gcc` (pas de droits admin requis, contrairement à choco qui a échoué ici faute d'élévation).
+
 ## 2. Fiabilité
 
 Bugs déjà rencontrés sur OXY-LD à traiter structurellement plutôt qu'au cas par cas :
@@ -34,6 +45,7 @@ Bugs déjà rencontrés sur OXY-LD à traiter structurellement plutôt qu'au cas
 - **Choix de pin invalidé a posteriori** (LED sur une strapping pin, déplacée deux fois) → la table de brochage vit à un seul endroit ([HARDWARE.md](HARDWARE.md)), vérifiée contre la documentation strapping-pin de l'ESP32-S3 *avant* implémentation, pas après un premier essai raté.
 - **Tests unitaires PlatformIO (Unity, environnement `native`)** pour toute la logique pure : calcul MOD, conversion tension→%O2, arrondi, compensation thermique, logique de calibration. Ces modules ne touchent pas au matériel — testables sans carte branchée.
 - **Watchdog matériel** activé, pour repartir proprement d'un état cohérent en cas de blocage plutôt que de rester figé.
+- **Détection de stabilité par critère de pente** (`stability`, non implémenté) : au lieu du seul seuil min/max sur fenêtre glissante d'OXY-LD (15 lectures, 0.1 %), critère `|ΔV/Δt| < ε` — le taux de variation du signal s'approche de zéro quand la réaction chimique de la cellule est terminée, ce qui colle mieux à la réalité physique qu'un simple écart max−min qui peut s'annuler par hasard sur du bruit. Valeurs de départ proposées (à calibrer sur la vraie cellule) : Δt = 1 s, ε = 0.02 %O2/s, doublé d'une durée minimale de 60 s depuis le dernier changement de gaz/calibration pour éviter qu'un plateau transitoire précoce soit pris pour une vraie stabilisation.
 
 ## 3. Précision de mesure
 
@@ -51,5 +63,6 @@ La chaîne de mesure O2 est le cœur du projet — elle mérite plus d'attention
 - Filtrage exact du signal ADS1115 (moyenne vs médiane, taille de fenêtre).
 - Format de persistance (Preferences/NVS natif ESP32 vs structure EEPROM versionnée maison).
 - Portée du firmware de test/diagnostic (OXY-LD garde des `.cpp` de diagnostic séparés dans `src/` — à reproduire ou remplacer par les tests unitaires `test/`).
+- Valeurs finales de Δt/ε/durée minimale pour `stability` — les valeurs de départ ci-dessus n'ont pas été mesurées sur une vraie cellule.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.
