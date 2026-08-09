@@ -10,7 +10,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 
 | Module (prévu) | Responsabilité |
 |---|---|
-| `o2_sensor` | Lecture ADS1115 différentielle, conversion tension → %O2, filtrage |
+| `o2_sensor` ✅ | Conversion tension → %O2, compensation thermique, filtrage — **partie pure implémentée**, voir ci-dessous. Lecture ADS1115 réelle reportée (module matériel séparé, à écrire au câblage) |
 | `calibration` | État de calibration (air, cellule), persistance, détection de vieillissement |
 | `stability` ✅ | Détection de stabilité par pente lissée — **implémenté**, voir ci-dessous |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
@@ -55,17 +55,26 @@ Bugs déjà rencontrés sur OXY-LD à traiter structurellement plutôt qu'au cas
 La chaîne de mesure O2 est le cœur du projet — elle mérite plus d'attention que le firmware périphérique :
 
 - **Mesure différentielle A0−A1** (déjà validée sur OXY-LD, conservée) — rejet du bruit secteur 50 Hz.
-- **Filtrage explicite et documenté** (moyenne glissante ou médiane sur N échantillons — à trancher en implémentant `o2_sensor`, avec le compromis stabilité/réactivité écrit en commentaire).
-- **Compensation thermique** via DS18B20 quantifiée et testée (le module `mod_calc`/`calibration` doit pouvoir être testé avec des valeurs de température connues et un résultat attendu).
+- **Filtrage explicite et documenté** — **tranché** : médiane de 3 échantillons (`GlitchFilter`, `lib/o2_sensor/glitch_filter.h`), pas une moyenne glissante. Une moyenne lisserait la vraie dynamique du signal et fausserait le calcul de pente de `stability` (double lissage, décalage imprévisible) ; la médiane rejette un glitch ADC isolé sans retarder un vrai changement — `stability` reste seule responsable de juger si c'est stabilisé.
+- **Compensation thermique** — structure implémentée (`apply_thermal_compensation()`, `lib/o2_sensor/conversion.h`), testée avec des valeurs connues. Le **coefficient lui-même reste à sourcer** : pas de valeur par défaut assumée dans le code, contrairement au "0.3%/°C" d'OXY-LD dont l'origine (fiche technique vs estimation) n'est pas vérifiable. Même principe que pour la table MOD FFESSM : pas de chiffre de sécurité sans source.
 - **Suivi du vieillissement de cellule** : la tension à l'air à chaque calibration est historisée, pas seulement la dernière valeur — permet de détecter une dérive avant que la cellule tombe sous le seuil de remplacement (~7 mV), plutôt que de le découvrir à la calibration suivante.
+
+### `o2_sensor` — partie pure implémentée
+
+`voltage_to_o2_percent(v_measured_mv, v_calibration_mv, o2_reference_percent=20.9)` : conversion linéaire, `NAN` si non calibré (`v_calibration_mv ≤ 0`). Ne possède pas l'état de calibration — fourni par l'appelant (module `calibration`, pas encore écrit).
+
+La lecture ADS1115 réelle (gain `GAIN_SIXTEEN`, `readADC_Differential_0_1()`) est **volontairement reportée** à un module matériel séparé, pas encore écrit. Elle ne peut pas vivre dans `lib/o2_sensor/` : PlatformIO compile tout le contenu d'un dossier `lib/` dès qu'un seul fichier est inclus, donc mélanger code pur et code dépendant d'`Adafruit_ADS1X15`/`Arduino.h` dans le même dossier casserait `pio test -e native`. Écrite au moment du câblage, quand elle sera vérifiable sur le vrai matériel.
+
+17 tests unitaires (`test/test_o2_sensor`), tous passés du premier coup.
 
 ---
 
 ## Ce qui n'est pas encore tranché
 
-- Filtrage exact du signal ADS1115 (moyenne vs médiane, taille de fenêtre).
 - Format de persistance (Preferences/NVS natif ESP32 vs structure EEPROM versionnée maison).
 - Portée du firmware de test/diagnostic (OXY-LD garde des `.cpp` de diagnostic séparés dans `src/` — à reproduire ou remplacer par les tests unitaires `test/`).
 - Valeurs finales de `ε`/`α`/`min_settle_ms`/`sustained_ms` pour `stability` — revues une fois sur retour d'expérience (analyseur du commerce), mais toujours pas mesurées sur la vraie cellule de ce projet.
+- Coefficient de compensation thermique (`coefficient_percent_per_c`) — à sourcer depuis la fiche technique de la cellule ou une mesure empirique.
+- Driver ADS1115 réel (lecture différentielle matérielle) — à écrire au câblage, dans un module séparé de `lib/o2_sensor/`.
 
 Ces points se trancheront à l'implémentation de chaque module, pas dans ce document.
