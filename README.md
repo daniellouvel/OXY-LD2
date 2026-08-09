@@ -34,7 +34,8 @@ OXY-LD2/
 │   ├── led_status/        Table état→couleur/clignotement LED
 │   ├── buttons/           Détection appui court/long
 │   ├── ads1115_reader/    Lecture ADS1115 réelle (matériel, vérifié sur carte)
-│   └── display/           Rendu écran TFT ST7789 (matériel, compile+flashe, rendu visuel non confirmé)
+│   ├── display/           Rendu écran TFT ST7789, police/format OXY-LD (matériel, vérifié sur carte)
+│   └── rtc_clock/         Horodatage RTC PCF8563 (matériel, vérifié sur carte)
 ├── test/                 Tests unitaires PlatformIO (pio test -e native)
 │   ├── test_mod_calc/
 │   ├── test_stability/

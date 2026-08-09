@@ -17,7 +17,7 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
 | `display` ✅ | Rendu écran TFT (ST7789) — **implémenté et confirmé visuellement**, voir ci-dessous. Police/format repris d'OXY-LD |
 | `storage` ✅ | Sérialisation versionnée de la calibration — **partiellement implémenté**, voir ci-dessous. Écriture flash réelle (NVS) reportée. Historique complet et réglages pas encore couverts |
-| `rtc_clock` | Horodatage RTC |
+| `rtc_clock` ✅ | Horodatage RTC PCF8563 — **implémenté et vérifié sur la carte**, voir ci-dessous |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
 | `printer` ✅ | Génération étiquette TSPL — **implémenté**, voir ci-dessous. Envoi UART reporté (imprimante non câblée) |
 | `led_status` ✅ | Codes couleur LED d'état — **implémenté**, voir ci-dessous. Rendu NeoPixel réel non inclus |
@@ -100,6 +100,16 @@ Signatures API vérifiées dans les vraies bibliothèques (`Adafruit ST7735 and 
 - **Taille du grand chiffre O2** : la première version appelait `center_text()` avec un `setTextSize(1)` codé en dur, alors qu'OXY-LD affiche ce chiffre précis à `setTextSize(2)` sur la police déjà la plus grande (`FreeSansBold24pt7b`) pour remplir l'espace disponible. `center_text()` prend maintenant un paramètre `scale` (défaut 1), utilisé à 2 uniquement pour ce chiffre — `y=48` repris exactement de la position vérifiée d'OXY-LD (`numTopY` dans `OXY-LD/src/main.cpp`), pas une valeur inventée.
 - **Fond noir** : posé explicitement dans `begin()` (`tft_.fillScreen(ST77XX_BLACK)` juste après le réglage MADCTL), pas seulement comme conséquence indirecte de `show_splash()`.
 
+**Badge de stabilité agrandi** suite à un second retour ("texte dans le petit carré trop petit") : passé de `setTextSize(1)` (taille exacte d'OXY-LD) à `setTextSize(2)`, boîte élargie de 72×22 à 92×32 pour accueillir le texte plus grand. Écart assumé par rapport à la fidélité stricte au gabarit d'OXY-LD — priorité donnée au retour direct de l'utilisateur sur la lisibilité réelle de cet écran précis.
+
+### `rtc_clock` — implémenté et **vérifié sur la carte**
+
+RTC câblé en cours de session (annoncé par l'utilisateur, pas câblé la veille). `RtcClock` (`lib/rtc_clock/`) : wrapper fin autour de `RTC_PCF8563` (RTClib), même raison de séparation que `ads1115_reader`/`display` — module matériel, pas de logique pure à tester en `native`. `now()`/`lostPower()` de RTClib ne sont pas const-qualifiées (accès I2C) : `RtcClock::now()`/`lost_power()` non plus, par cohérence — piège évité avant compilation en vérifiant les signatures réelles plutôt que de deviner.
+
+Horloge affichée en haut à gauche (`Display::show_clock()`, zone 0,0,90,26 reprise d'OXY-LD), même cache anti-scintillement que le reste (`prev_clock_text_`). `lost_power()` vérifié au démarrage (pile CR2032 absente/HS → heure non fiable) et loggé, sans action corrective possible pour l'instant (pas de bouton pour régler l'heure).
+
+**Vérifié par log série** : `rtc_ok=1 clock=11:34` — RTC détecté à l'adresse I2C 0x51, heure lue plausible (correspond à l'heure réelle de la session). `RTC_PCF8563.cpp` déjà confirmé présent dans `RTClib @ 2.1.4` lors du premier `pio run -e esp32s3` de cette session — l'intégration n'a donc pas eu de surprise côté bibliothèque.
+
 ### `calibration` — implémenté
 
 `CalibrationTracker` : tension à l'air + température **optionnelle** (sentinelle `NAN`, cohérent avec le reste du code — pas `std::optional`, portabilité ESP32/Arduino incertaine). Le DS18B20 étant explicitement optionnel dans HARDWARE.md, la température ne peut pas être un paramètre obligatoire. `has_temperature()` distingue "pas calibré" de "calibré sans sonde".
@@ -164,7 +174,8 @@ Boucle : `ads1115_reader` → `GlitchFilter` → `voltage_to_o2_percent` → `St
 - Persistance de l'historique complet de calibration (pas seulement le dernier point) — nécessite d'étendre `CalibrationTracker`.
 - Persistance de l'historique d'analyses et des réglages (ppO2 verrouillée, nom de station...) — pas encore couverte par `storage`.
 - **Auto-calibration naïve de `main.cpp`** (première lecture = référence) à remplacer par un vrai déclenchement (bouton `ButtonTracker`, déjà écrit) dès que les TTP223 sont câblés.
-- **Intégration RTC/DS18B20/boutons dans `main.cpp`** — hors scope de cette nuit car non câblés. `RTC_PCF8563.cpp` confirmé présent dans `RTClib @ 2.1.4` (compilé avec succès cette nuit) — l'incertitude notée précédemment sur le support PCF8563 de cette bibliothèque est levée.
+- **Intégration DS18B20/boutons dans `main.cpp`** — hors scope pour l'instant, non câblés (RTC câblé et intégré depuis).
+- **Réglage de l'heure RTC** — pas de bouton pour le faire ; `lost_power()` est vérifié et loggé mais aucune action corrective possible actuellement.
 - Positions/tailles de police TSPL (`printer`) — jamais vérifiées visuellement (imprimante non câblée), point de départ à ajuster.
 - **`-std=gnu++17` ajouté à `[env:esp32s3]` mais n'élimine pas le warning `inline constexpr` d'`mod_table.h`**, même après un rebuild complet (`rm -rf .pio/build/esp32s3`) — probablement un flag `-std=` par défaut de la plateforme `espressif32` placé après le nôtre sur la ligne de commande GCC (le dernier `-std=` gagne). Cosmétique (warning, pas erreur, aucun effet observé sur le fonctionnement), pas creusé davantage cette nuit.
 

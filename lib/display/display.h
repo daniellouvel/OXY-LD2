@@ -38,6 +38,10 @@ class Display {
   void show_measurement(int o2_percent, int mod_meters, float ppo2_setpoint,
                         RgbColor color, bool stable, bool o2_value_visible);
 
+  // Horloge en haut a gauche (zone 0,0,90,26 - reprise d'OXY-LD). Ne
+  // redessine que si l'heure affichee a change (meme cache anti-scintillement).
+  void show_clock(int hour, int minute);
+
  private:
   // scale=1 pour la plupart des textes ; le grand chiffre O2 utilise
   // scale=2 sur la police deja la plus grande (FreeSansBold24pt7b) pour
@@ -57,4 +61,5 @@ class Display {
   bool prev_badge_stable_ = false;
   char prev_mod_text_[24] = "";
   char prev_ppo2_text_[16] = "";
+  char prev_clock_text_[8] = "";
 };

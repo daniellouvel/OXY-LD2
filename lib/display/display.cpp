@@ -88,22 +88,26 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     }
   }
 
-  // -- Badge stabilite (haut-droit) -- ne clignote pas, cf. header.
+  // -- Badge stabilite (haut-droit) -- ne clignote pas, cf. header. Agrandi
+  // (scale=2) suite au retour utilisateur ("texte dans le petit carre trop
+  // petit") - la version initiale reprenait la taille exacte d'OXY-LD
+  // (scale=1) mais s'est averee trop petite pour etre lisible ici.
   if (force || stable != prev_badge_stable_ || !prev_badge_shown_) {
     prev_badge_shown_ = true;
     prev_badge_stable_ = stable;
-    tft_.fillRect(240, 0, kScreenW - 240, 26, ST77XX_BLACK);
+    constexpr int16_t bx = 224, by = 0, bw = 96, bh = 32;
+    tft_.fillRect(bx, by, bw, bh, ST77XX_BLACK);
     uint16_t badge_col = stable ? ST77XX_GREEN : tft_.color565(230, 120, 0);
-    tft_.fillRoundRect(244, 2, 72, 22, 4, badge_col);
+    tft_.fillRoundRect(bx + 2, by + 2, bw - 4, bh - 4, 5, badge_col);
     const char* txt = stable ? "OK" : "...";
     tft_.setFont(&FreeSansBold9pt7b);
-    tft_.setTextSize(1);
+    tft_.setTextSize(2);
     int16_t bx1, by1;
     uint16_t bw1, bh1;
     tft_.getTextBounds(txt, 0, 0, &bx1, &by1, &bw1, &bh1);
     tft_.setTextColor(ST77XX_BLACK);
-    tft_.setCursor(244 + (72 - static_cast<int16_t>(bw1)) / 2 - bx1,
-                   2 + (22 - static_cast<int16_t>(bh1)) / 2 - by1);
+    tft_.setCursor(bx + (bw - static_cast<int16_t>(bw1)) / 2 - bx1,
+                   by + (bh - static_cast<int16_t>(bh1)) / 2 - by1);
     tft_.print(txt);
     tft_.setFont(nullptr);
   }
@@ -126,4 +130,27 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     center_text(mod_text, 165, &FreeSansBold12pt7b, ST77XX_WHITE);
     center_text(ppo2_text, 200, &FreeSansBold9pt7b, ST77XX_WHITE);
   }
+}
+
+void Display::show_clock(int hour, int minute) {
+  char clock_text[8];
+  std::snprintf(clock_text, sizeof(clock_text), "%02d:%02d", hour, minute);
+
+  if (!force_redraw_ && std::strcmp(clock_text, prev_clock_text_) == 0) {
+    return;
+  }
+  std::strcpy(prev_clock_text_, clock_text);
+
+  // Zone haut-gauche (0,0,90,26) - reprise d'OXY-LD. Texte aligne a
+  // gauche (pas centre sur l'ecran entier, contrairement a center_text()).
+  tft_.fillRect(0, 0, 90, 26, ST77XX_BLACK);
+  tft_.setFont(&FreeSansBold9pt7b);
+  tft_.setTextSize(1);
+  tft_.setTextColor(ST77XX_WHITE);
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft_.getTextBounds(clock_text, 0, 0, &x1, &y1, &w, &h);
+  tft_.setCursor(4 - x1, 4 - y1);
+  tft_.print(clock_text);
+  tft_.setFont(nullptr);
 }

@@ -11,4 +11,5 @@ Bibliothèques privées PlatformIO, une par responsabilité matérielle ou fonct
 - `led_status/` — table pure état→couleur/clignotement, pas d'appel matériel. Testé en `native`.
 - `buttons/` — détection appui court/long, appui long détecté pendant le maintien (pas au relâchement). Lecture TTP223 réelle non incluse (non câblés). Testé en `native`.
 - `ads1115_reader/` — lecture différentielle ADS1115 réelle (matériel, `pio run -e esp32s3` uniquement). **Flashé et vérifié par log série sur la vraie carte.**
-- `display/` — rendu écran TFT ST7789 (matériel, `pio run -e esp32s3` uniquement). Compile et flashe, tourne sans planter, mais le rendu visuel n'a pas été confirmé à l'oeil (pas d'accès physique à l'écran).
+- `display/` — rendu écran TFT ST7789, police vectorielle et gabarit repris d'OXY-LD, cache anti-scintillement (matériel, `pio run -e esp32s3` uniquement). **Confirmé visuellement sur la carte.**
+- `rtc_clock/` — horodatage RTC PCF8563 (matériel, `pio run -e esp32s3` uniquement). **Confirmé par log série** (heure lue plausible).

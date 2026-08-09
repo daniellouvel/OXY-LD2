@@ -8,19 +8,17 @@
 #include "led_status.h"
 #include "mod_table.h"
 #include "o2_value.h"
+#include "rtc_clock.h"
 #include "stability.h"
 
-// Boucle de mesure de bout en bout - PREMIERE INTEGRATION MATERIELLE,
-// ECRITE CETTE NUIT, NON VERIFIEE SUR LA CARTE REELLE AU MOMENT DE
-// L'ECRITURE. Compile avec succes contre les vraies bibliotheques
-// (verifiees dans .pio/libdeps/esp32s3/) mais jamais flashee ni observee
-// en fonctionnement. Voir ARCHITECTURE.md pour le detail des limites.
+// Boucle de mesure de bout en bout - PREMIERE INTEGRATION MATERIELLE.
+// Voir ARCHITECTURE.md pour le detail des limites et de ce qui est verifie.
 //
-// Scope volontairement reduit a ce qui est reellement cable ce soir :
-// ESP32-S3 + ADS1115 + cellule O2 + ecran TFT. RTC, DS18B20 et boutons ne
-// sont PAS cables :
-//  - millis() sert d'horloge (stability/calibration prennent deja un
-//    uint32_t now_ms brut, agnostique de la source)
+// Cable a ce jour : ESP32-S3 + ADS1115 + cellule O2 + ecran TFT + RTC
+// PCF8563. DS18B20 et boutons ne sont PAS cables :
+//  - millis() sert toujours d'horloge pour stability/calibration (uint32_t
+//    now_ms brut, distinct de l'heure murale du RTC qui sert uniquement
+//    a l'affichage)
 //  - pas de compensation thermique (apply_thermal_compensation() non
 //    appelee - has_temperature() resterait de toute facon faux)
 //  - ppO2 fixe en dur a 1.6 (pas de bouton pour la choisir)
@@ -36,7 +34,10 @@ namespace {
 
 Ads1115Reader ads;
 Display display;
+RtcClock rtc;
 GlitchFilter glitch_filter;
+
+bool rtc_ok = false;
 
 // Plage de tension plausible non sourcee (pas de fiche technique
 // verifiee pour la cellule montee) - point de depart large, a resserrer.
@@ -74,9 +75,24 @@ void setup() {
   Serial.println("display.begin() termine");
   display.show_splash();
   stability.reset(millis());
+
+  rtc_ok = rtc.begin();
+  if (!rtc_ok) {
+    Serial.println("ERREUR : RTC non detecte (I2C 0x51)");
+  } else if (rtc.lost_power()) {
+    Serial.println("RTC detecte mais heure non fiable (perte d'alimentation) - a regler");
+  } else {
+    Serial.println("RTC detecte, heure OK");
+  }
 }
 
 void loop() {
+  if (rtc_ok) {
+    int hour, minute;
+    rtc.now(&hour, &minute);
+    display.show_clock(hour, minute);
+  }
+
   if (!ads_ok) {
     show_error();
     return;
@@ -120,8 +136,13 @@ void loop() {
   static uint32_t last_log_ms = 0;
   if (now - last_log_ms >= 1000) {
     last_log_ms = now;
-    Serial.printf("v_mv=%.3f fo2=%.2f o2=%d mod=%d slope=%.4f stable=%d cal_v=%.3f\n",
-                  filtered_mv, fo2_raw, o2_display, mod, stability.current_slope(),
-                  stability.is_stable() ? 1 : 0, calibration.current_v_air_mv());
+    int h = -1, m = -1;
+    if (rtc_ok) {
+      rtc.now(&h, &m);
+    }
+    Serial.printf(
+        "v_mv=%.3f fo2=%.2f o2=%d mod=%d slope=%.4f stable=%d cal_v=%.3f rtc_ok=%d clock=%02d:%02d\n",
+        filtered_mv, fo2_raw, o2_display, mod, stability.current_slope(),
+        stability.is_stable() ? 1 : 0, calibration.current_v_air_mv(), rtc_ok ? 1 : 0, h, m);
   }
 }
