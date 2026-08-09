@@ -9,3 +9,5 @@ void RtcClock::now(int* hour, int* minute) {
   *hour = t.hour();
   *minute = t.minute();
 }
+
+uint32_t RtcClock::unix_time() { return rtc_.now().unixtime(); }

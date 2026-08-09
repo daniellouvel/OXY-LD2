@@ -88,6 +88,20 @@ std::string build_dive_page(const DiveStatus& status) {
     body += "<p>Pas de mesure valide pour l'instant.</p>";
   }
 
+  body += "<h2>Calibration</h2>";
+  body += "<p>Etat : ";
+  body += status.calibrated ? "<span class=\"status-ok\">calibre</span>"
+                             : "<span class=\"status-bad\">non calibre</span>";
+  body += "</p>";
+  body += "<form method=\"POST\" action=\"/calibrate\">";
+  body += "<button type=\"submit\">Calibrer maintenant</button>";
+  body += "</form>";
+  body +=
+      "<p style=\"font-size:.9rem;color:#aaa\">Exposer la cellule a l'air ambiant et attendre "
+      "que la stabilite passe a OK AVANT de cliquer - une demande faite pendant que la mesure "
+      "bouge encore est ignoree silencieusement (pas de file d'attente), reessayer une fois "
+      "stable.</p>";
+
   return page_shell("Plongee", body);
 }
 
@@ -109,8 +123,9 @@ std::string build_tables_page() {
 
 std::string build_status_json(const HardwareStatus& hw, const DiveStatus& dive) {
   return fmt(
-      "{\"o2\":%d,\"mod\":%d,\"ppo2\":%.1f,\"stable\":%s,\"ads_ok\":%s,\"rtc_ok\":%s}",
+      "{\"o2\":%d,\"mod\":%d,\"ppo2\":%.1f,\"stable\":%s,\"calibrated\":%s,\"ads_ok\":%s,"
+      "\"rtc_ok\":%s}",
       dive.o2_percent, dive.mod_meters, static_cast<double>(dive.ppo2_setpoint),
-      dive.stable ? "true" : "false", hw.ads_ok ? "true" : "false",
-      hw.rtc_ok ? "true" : "false");
+      dive.stable ? "true" : "false", dive.calibrated ? "true" : "false",
+      hw.ads_ok ? "true" : "false", hw.rtc_ok ? "true" : "false");
 }

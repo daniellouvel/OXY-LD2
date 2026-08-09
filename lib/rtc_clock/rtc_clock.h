@@ -24,6 +24,12 @@ class RtcClock {
   // ces methodes ne le sont donc pas non plus, par coherence.
   void now(int* hour, int* minute);
 
+  // Secondes depuis l'epoque Unix - seule source de temps qui survit a un
+  // redemarrage (contrairement a millis()). Utilise pour l'age de
+  // calibration (cf. main.cpp), PAS pour stability qui reste sur millis()
+  // (pas besoin de survivre au reboot pour du court terme).
+  uint32_t unix_time();
+
  private:
   RTC_PCF8563 rtc_;
 };

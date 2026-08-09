@@ -12,11 +12,11 @@ OXY-LD concentre capteur, affichage, stockage, réseau, impression et RFID dans 
 |---|---|
 | `o2_sensor` ✅ | Conversion tension → %O2, compensation thermique, filtrage — **implémenté**, voir ci-dessous |
 | `ads1115_reader` ✅ | Lecture différentielle ADS1115 réelle — **implémenté et vérifié sur la carte**, voir ci-dessous |
-| `calibration` ✅ | État de calibration (air, cellule optionnellement thermique), détection de vieillissement — **implémenté**, voir ci-dessous. Persistance flash déléguée à `storage` |
-| `stability` ✅ | Détection de stabilité par pente lissée — **implémenté**, voir ci-dessous |
+| `calibration` ✅ | État de calibration + **méthode réelle (auto + manuelle) implémentée et vérifiée sur la carte**, voir ci-dessous |
+| `stability` ✅ | Détection de stabilité par pente lissée, **sur la tension brute** (pas le %O2) depuis l'ajout de la calibration réelle — voir ci-dessous |
 | `mod_calc` ✅ | MOD par table statique — **implémenté**, voir ci-dessous |
 | `display` ✅ | Rendu écran TFT (ST7789) — **implémenté et confirmé visuellement**, voir ci-dessous. Police/format repris d'OXY-LD |
-| `storage` ✅ | Sérialisation versionnée de la calibration — **partiellement implémenté**, voir ci-dessous. Écriture flash réelle (NVS) reportée. Historique complet et réglages pas encore couverts |
+| `storage` ✅ | Sérialisation versionnée de la calibration + **écriture flash réelle (Preferences NVS) implémentée et vérifiée**, voir ci-dessous. Historique complet et réglages pas encore couverts |
 | `rtc_clock` ✅ | Horodatage RTC PCF8563 — **implémenté et vérifié sur la carte**, voir ci-dessous |
 | `rfid_badge` | Lecture badges PN532 (nom, licence FFESSM) |
 | `printer` ✅ | Génération étiquette TSPL — **implémenté**, voir ci-dessous. Envoi UART reporté (imprimante non câblée) |
@@ -127,17 +127,36 @@ Horloge affichée en haut à gauche (`Display::show_clock()`, zone 0,0,90,26 rep
 
 Historique en buffer circulaire à capacité fixe (10, pas de valeur validée — arbitraire mais raisonnable, ajustable) pour détecter une **dérive progressive** (`is_declining()`, compare la calibration la plus ancienne *encore en mémoire* à la plus récente) en plus du seuil dur (`is_cell_aging()`). Aucune des constantes de sécurité (plage de tension plausible, seuil de remplacement ~7 mV, seuil de dérive) n'a de valeur par défaut codée en dur — toutes passées en paramètre par l'appelant, même principe que pour le coefficient thermique et la table MOD.
 
-Persistance flash **non incluse ici** — `calibrate()` ne fait qu'une gestion d'état en mémoire ; l'écriture réelle (NVS/EEPROM versionnée, cf. §2) est la responsabilité de `storage`, pas encore écrit.
-
 11 tests unitaires (`test/test_calibration`), incluant un test dédié à l'éviction du buffer circulaire (vérifie que `is_declining()` compare bien contre le plus ancien point *encore présent*, pas le tout premier historique jamais enregistré).
 
-### `storage` — partiellement implémenté
+### Méthode de calibration réelle — conçue avec l'utilisateur, implémentée et vérifiée
+
+Demande explicite : calibration possible depuis l'interface web **et** automatique au démarrage, avec un moyen d'éviter qu'un redémarrage rapide (gaz résiduel dans le circuit) ne déclenche une calibration invalide. Recherche faite dans le code réel d'OXY-LD (`g_autoCalibHours`, défaut 24h, armé au boot si assez de temps écoulé depuis la dernière calibration RTC, déclenché seulement une fois stable) avant de concevoir la version OXY-LD2, plutôt que d'improviser.
+
+**Trois garde-fous cumulatifs, combinant les deux propositions de l'utilisateur + une troisième ajoutée** :
+1. **Temps de repos (idée utilisateur, validée par l'usage réel d'OXY-LD)** — 24h par défaut entre deux auto-calibrations. Protège du redémarrage rapide.
+2. **Plage de tension plausible (idée utilisateur)** — déjà portée par `CalibrationTracker` (`v_air_min_mv`/`v_air_max_mv`), maintenant correctement branchée à la fois sur l'auto-calibration et la calibration manuelle. Protège du mauvais gaz resté branché même après une longue pause.
+3. **Stabilité (ajout)** — ne calibrer que si `stability.is_stable()`, jamais sur une lecture instantanée.
+
+**Asymétrie délibérée entre auto et manuel** (position de l'assistant, adoptée par l'utilisateur) : le temps de repos ne s'applique qu'à l'auto-calibration. Une calibration manuelle demandée par l'encadrant depuis `/plongee` n'est PAS soumise au repos — c'est une décision humaine explicite, pas un déclenchement automatique à protéger contre lui-même — mais reste soumise aux deux autres garde-fous (plage plausible, stabilité). Cohérent avec OXY-LD, dont le handler web `/calibrate` rejette immédiatement (pas de mise en file d'attente) si `!g_isStable` — même choix repris ici : la demande manuelle est un essai unique, silencieusement ignorée si non stable au moment du clic (texte affiché sur `/plongee` pour prévenir l'utilisateur), pas mise en attente comme l'auto-calibration.
+
+**Prérequis technique découvert en concevant la fonctionnalité** : "temps depuis la dernière calibration" n'a de sens que si la calibration **survit à un redémarrage**. Ça a entraîné deux changements structurants, pas prévus au départ :
+- **Écriture flash réelle** (`Preferences`, namespace `"oxyld2"`, clé `"cal"`) — chargée au boot, réutilise directement `serialize_calibration()`/`deserialize_calibration()` déjà écrits et testés hier soir. Si aucune calibration valide n'est trouvée en flash (première mise en service, ou données corrompues), **pas d'auto-armement** — la toute première calibration doit être manuelle (même comportement qu'OXY-LD : `g_autoCalibHours` n'agit que si `g_calibDateValid` est déjà vrai).
+- **`calibration` passe sur l'horloge RTC** (`rtc.unix_time()`, secondes Unix) au lieu de `millis()`, qui repart à zéro à chaque redémarrage et rendrait "temps écoulé" toujours nul. `stability` reste sur `millis()` (pas besoin de survivre au reboot pour du court terme) — deux horloges différentes, choix délibéré et documenté dans le code, pas une incohérence.
+
+**Effet de bord important, découvert en implémentant, pas anticipé au départ** : convertir une tension brute en %O2 nécessite déjà une calibration (`voltage_to_o2_percent`) — donc si `stability` avait continué à recevoir le %O2 calculé, il aurait été impossible de détecter la stabilité *avant* la toute première calibration (dépendance circulaire : pas de stabilité sans calibration, pas de calibration sans stabilité). **`stability.push_sample()` reçoit maintenant la tension brute (`filtered_mv`) directement**, pas le %O2 — %O2 = k·mV étant linéaire, la détection de pente donne le même résultat qualitatif (mêmes passages à zéro de la dérivée), seul le seuil ε change d'unité (mV/s au lieu de %O2/s). Ça rend aussi `stability` utilisable même quand rien n'est encore calibré, ce qui est correct : "le signal a-t-il fini de bouger" ne devrait jamais avoir dépendu d'une calibration potentiellement fausse.
+
+**Seuil ε recalibré sur une vraie observation, pas une seconde extrapolation** : la conversion naïve de l'ancien seuil %O2/s (0.02) vers mV/s par un facteur supposé donnait 0.01 mV/s — **jamais atteignable en pratique**, observé en direct sur la carte réelle : le bruit ambiant de cette cellule (posée sur la paillasse, aucun changement de gaz) oscille déjà en continu entre 0.02 et 0.4 mV/s, largement au-dessus de 0.01, donc `stability.is_stable()` ne passait jamais à vrai. Remonté à **0.5 mV/s**, valeur ancrée sur le bruit réellement mesuré cette fois (pas une pure extrapolation), et **`stable=1` confirmé atteint** en observation directe après correction. Toujours pas vérifié pour discriminer un vrai changement de gaz du bruit ambiant — nécessiterait de souffler/couvrir la cellule physiquement, impossible à distance.
+
+**Vérifié par log série** : premier boot sans calibration flash → `"Aucune calibration valide en flash - calibration manuelle requise"` (pas d'auto-armement, conforme). Diagnostic ajouté spécifiquement pour rester visible même en état non calibré (`is_fo2_valid()` échoue tant que non calibré, ce qui coupait le log de diagnostic existant avant ce correctif — bug trouvé et corrigé dans la foulée). **Non vérifié** : le déclenchement effectif d'une calibration (auto ou via le bouton web) — nécessiterait d'attendre 24h pour l'auto, ou de cliquer le bouton web au bon moment (accès navigateur non disponible pour l'assistant).
+
+### `storage` — écriture flash réelle implémentée
 
 `serialize_calibration()`/`deserialize_calibration()` (`lib/storage/calibration_storage.h`) : format fixe 17 octets (version + `v_air_mv` + `temp_c` + `timestamp_ms` + checksum FNV-1a 32 bits). `temp_c` à `NAN` se sérialise/désérialise sans traitement spécial — copie brute des bits, pas d'arithmétique dessus.
 
-**Limite assumée, prise sans redemander confirmation** (« fait au mieux ») : seul le **dernier** point de calibration est persisté, pas les 10 entrées d'historique que garde `CalibrationTracker` en mémoire. Conséquence concrète : `is_declining()` ne voit que les calibrations faites depuis le dernier redémarrage, pas la dérive sur plusieurs semaines/mois que la fonctionnalité est censée capter à terme (cf. §3, "Suivi du vieillissement de cellule"). Persister l'historique complet demanderait d'exposer l'état interne de `CalibrationTracker` (déjà committé) — repoussé plutôt que fait à moitié en silence.
+**Écriture flash réelle** (`Preferences`, cf. section calibration ci-dessus) implémentée en réponse directe à la demande de calibration au démarrage — le report initial ("non vérifiable sans matériel") ne tenait plus une fois le besoin fonctionnel concret identifié.
 
-L'écriture flash réelle (`Preferences.putBytes()`/`getBytes()`) n'est pas incluse — même raison que le driver ADS1115 : non vérifiable sans matériel, reportée au câblage.
+**Limite toujours assumée** : seul le **dernier** point de calibration est persisté, pas les 10 entrées d'historique que garde `CalibrationTracker` en mémoire — `is_declining()` ne voit donc que les calibrations faites depuis le dernier redémarrage, pas la dérive sur plusieurs semaines/mois. Persister l'historique complet demanderait d'exposer l'état interne de `CalibrationTracker` (déjà committé et testé) — toujours repoussé, pas fait à moitié en silence.
 
 6 tests unitaires (`test/test_storage`) : aller-retour avec/sans température, version incompatible, checksum corrompu, flash vierge (`0xFF`).
 
@@ -202,13 +221,13 @@ Demande explicite : configuration entièrement via serveur web accessible à l'e
 ## Ce qui n'est pas encore tranché
 
 - Portée du firmware de test/diagnostic (OXY-LD garde des `.cpp` de diagnostic séparés dans `src/` — à reproduire ou remplacer par les tests unitaires `test/`).
-- Valeurs finales de `ε`/`α`/`min_settle_ms`/`sustained_ms` pour `stability` — revues une fois sur retour d'expérience (analyseur du commerce), mais toujours pas mesurées sur la vraie cellule de ce projet.
+- Valeurs finales de `α`/`min_settle_ms`/`sustained_ms` pour `stability` — `ε` recalibré une fois sur du bruit réellement observé (0.5 mV/s), mais toujours pas vérifié pour distinguer un vrai changement de gaz du bruit ambiant (nécessite un stimulus physique réel).
 - Coefficient de compensation thermique (`coefficient_percent_per_c`) — à sourcer depuis la fiche technique de la cellule ou une mesure empirique.
-- Constantes `calibration` : plage de tension plausible à l'air, seuil de remplacement cellule, seuil de dérive, capacité de l'historique (10 par défaut, arbitraire) — aucune sourcée depuis une fiche technique vérifiée.
-- Écriture flash réelle de `storage` (`Preferences.putBytes`/`getBytes`) — à écrire au câblage.
+- Constantes `calibration` : plage de tension plausible à l'air (5-15 mV, non vérifiée), seuil de remplacement cellule, seuil de dérive, capacité de l'historique (10 par défaut, arbitraire) — aucune sourcée depuis une fiche technique vérifiée.
+- Durée du temps de repos auto-calibration (24h) — reprise d'OXY-LD, jamais testée en conditions réelles sur ce projet (nécessiterait d'attendre 24h ou de manipuler l'horloge RTC).
 - Persistance de l'historique complet de calibration (pas seulement le dernier point) — nécessite d'étendre `CalibrationTracker`.
 - Persistance de l'historique d'analyses et des réglages (ppO2 verrouillée, nom de station...) — pas encore couverte par `storage`.
-- **Auto-calibration naïve de `main.cpp`** (première lecture = référence) à remplacer par un vrai déclenchement (bouton `ButtonTracker`, déjà écrit) dès que les TTP223 sont câblés.
+- **Déclenchement effectif d'une calibration (auto ou manuelle) non vérifié** — mécanisme testé jusqu'à `stable=1`, mais pas la calibration elle-même (accès navigateur non disponible pour l'assistant, 24h d'attente pour l'auto).
 - **Intégration DS18B20/boutons dans `main.cpp`** — hors scope pour l'instant, non câblés (RTC câblé et intégré depuis).
 - **Réglage de l'heure RTC** — pas de bouton pour le faire ; `lost_power()` est vérifié et loggé mais aucune action corrective possible actuellement.
 - Positions/tailles de police TSPL (`printer`) — jamais vérifiées visuellement (imprimante non câblée), point de départ à ajuster.

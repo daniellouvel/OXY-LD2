@@ -36,29 +36,46 @@ void test_hardware_page_shows_absent_status(void) {
 }
 
 void test_dive_page_marks_correct_ppo2_selected(void) {
-  DiveStatus d14{21, 66, 1.4f, false};
+  DiveStatus d14{21, 66, 1.4f, false, true};
   std::string page14 = build_dive_page(d14);
   TEST_ASSERT_TRUE(page14.find("value=\"1.4\" selected") != std::string::npos);
   TEST_ASSERT_TRUE(page14.find("value=\"1.6\" selected") == std::string::npos);
 
-  DiveStatus d16{21, 66, 1.6f, false};
+  DiveStatus d16{21, 66, 1.6f, false, true};
   std::string page16 = build_dive_page(d16);
   TEST_ASSERT_TRUE(page16.find("value=\"1.6\" selected") != std::string::npos);
   TEST_ASSERT_TRUE(page16.find("value=\"1.4\" selected") == std::string::npos);
 }
 
 void test_dive_page_no_measurement_yet(void) {
-  DiveStatus d{-1, -1, 1.6f, false};
+  DiveStatus d{-1, -1, 1.6f, false, false};
   std::string page = build_dive_page(d);
   TEST_ASSERT_TRUE(page.find("Pas de mesure valide") != std::string::npos);
 }
 
 void test_dive_page_shows_measurement_and_stability(void) {
-  DiveStatus d{21, 66, 1.6f, true};
+  DiveStatus d{21, 66, 1.6f, true, true};
   std::string page = build_dive_page(d);
   TEST_ASSERT_TRUE(page.find("O2 : 21 %") != std::string::npos);
   TEST_ASSERT_TRUE(page.find("MOD : 66 m") != std::string::npos);
   TEST_ASSERT_TRUE(page.find("status-ok\">OK") != std::string::npos);
+}
+
+void test_dive_page_calibrated_status(void) {
+  DiveStatus calibrated{21, 66, 1.6f, true, true};
+  std::string page = build_dive_page(calibrated);
+  TEST_ASSERT_TRUE(page.find("status-ok\">calibre") != std::string::npos);
+  TEST_ASSERT_TRUE(page.find("status-bad\">non calibre") == std::string::npos);
+
+  DiveStatus not_calibrated{-1, -1, 1.6f, false, false};
+  std::string page2 = build_dive_page(not_calibrated);
+  TEST_ASSERT_TRUE(page2.find("status-bad\">non calibre") != std::string::npos);
+}
+
+void test_dive_page_has_calibrate_button(void) {
+  DiveStatus d{-1, -1, 1.6f, false, false};
+  std::string page = build_dive_page(d);
+  TEST_ASSERT_TRUE(page.find("action=\"/calibrate\"") != std::string::npos);
 }
 
 void test_tables_page_contains_validated_reference_rows(void) {
@@ -74,12 +91,13 @@ void test_tables_page_contains_validated_reference_rows(void) {
 
 void test_status_json_contains_expected_fields(void) {
   HardwareStatus hw{true, true, 10, 0, 8.0f};
-  DiveStatus d{21, 66, 1.6f, true};
+  DiveStatus d{21, 66, 1.6f, true, true};
   std::string json = build_status_json(hw, d);
   TEST_ASSERT_TRUE(json.find("\"o2\":21") != std::string::npos);
   TEST_ASSERT_TRUE(json.find("\"mod\":66") != std::string::npos);
   TEST_ASSERT_TRUE(json.find("\"ppo2\":1.6") != std::string::npos);
   TEST_ASSERT_TRUE(json.find("\"stable\":true") != std::string::npos);
+  TEST_ASSERT_TRUE(json.find("\"calibrated\":true") != std::string::npos);
   TEST_ASSERT_TRUE(json.find("\"ads_ok\":true") != std::string::npos);
   TEST_ASSERT_TRUE(json.find("\"rtc_ok\":true") != std::string::npos);
 }
@@ -92,6 +110,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_dive_page_marks_correct_ppo2_selected);
   RUN_TEST(test_dive_page_no_measurement_yet);
   RUN_TEST(test_dive_page_shows_measurement_and_stability);
+  RUN_TEST(test_dive_page_calibrated_status);
+  RUN_TEST(test_dive_page_has_calibrate_button);
   RUN_TEST(test_tables_page_contains_validated_reference_rows);
   RUN_TEST(test_status_json_contains_expected_fields);
   return UNITY_END();

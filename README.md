@@ -4,7 +4,7 @@
 
 Ce projet reprend le matériel documenté dans [OXY-LD](../OXY-LD) (station de paillasse ESP32-S3, alimentation secteur 220V AC) mais repart d'une base de code neuve. Objectif : un firmware modulaire, robuste et précis — pas une évolution incrémentale du `main.cpp` existant.
 
-> **Statut : en cours.** Neuf modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage`, `printer`, `led_status`, `buttons`, `web_ui`). Intégration matérielle flashée et **confirmée fonctionnelle** sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT + RTC) — mesure, calcul MOD et affichage vérifiés de bout en bout. Serveur web de configuration (`/materiel`, `/plongee`, `/tables`) intégré, SSID `OXY-LD2` confirmé actif — pages pas encore testées via navigateur.
+> **Statut : en cours.** Neuf modules purs implémentés et testés (`mod_calc`, `stability`, `o2_sensor`, `calibration`, `storage`, `printer`, `led_status`, `buttons`, `web_ui`). Intégration matérielle flashée et **confirmée fonctionnelle** sur la carte câblée (ESP32-S3 + ADS1115 + cellule O2 + écran TFT + RTC) — mesure, calcul MOD et affichage vérifiés de bout en bout. Serveur web de configuration (`/materiel`, `/plongee`, `/tables`, calibration) accessible depuis PC et téléphone. Calibration réelle (auto au démarrage avec repos 24h + manuelle via `/plongee`) persistée en flash, mécanisme vérifié jusqu'à l'obtention de la stabilité — le déclenchement effectif d'une calibration reste à confirmer par l'utilisateur.
 
 ---
 

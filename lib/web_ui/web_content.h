@@ -26,6 +26,7 @@ struct DiveStatus {
   int mod_meters;       // -1 si hors table ou pas de mesure valide
   float ppo2_setpoint;   // 1.4 ou 1.6
   bool stable;
+  bool calibrated;      // faux si aucune calibration valide (jamais faite / rejetee)
 };
 
 // Habillage commun (titre + navigation entre les pages) autour d'un corps
