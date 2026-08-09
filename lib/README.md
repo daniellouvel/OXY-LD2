@@ -11,6 +11,6 @@ Bibliothèques privées PlatformIO, une par responsabilité matérielle ou fonct
 - `led_status/` — table pure état→couleur/clignotement, pas d'appel matériel. Testé en `native`.
 - `buttons/` — détection appui court/long, appui long détecté pendant le maintien (pas au relâchement). Lecture TTP223 réelle non incluse (non câblés). Testé en `native`.
 - `ads1115_reader/` — lecture différentielle ADS1115 réelle (matériel, `pio run -e esp32s3` uniquement). **Flashé et vérifié par log série sur la vraie carte.**
-- `display/` — rendu écran TFT ST7789, police vectorielle et gabarit repris d'OXY-LD, cache anti-scintillement (matériel, `pio run -e esp32s3` uniquement). **Confirmé visuellement sur la carte.**
+- `display/` — rendu écran TFT ST7789, police vectorielle et gabarit repris d'OXY-LD, cache anti-scintillement (matériel, `pio run -e esp32s3` uniquement). **Confirmé visuellement sur la carte.** Badge de calibration permanent (bas-droit, vert/rouge) + message temporaire de résultat de calibration manuelle ajoutés — flashés et exercés en conditions réelles (log série), rendu visuel pas encore confirmé par l'utilisateur.
 - `rtc_clock/` — horodatage RTC PCF8563 (matériel, `pio run -e esp32s3` uniquement). **Confirmé par log série** (heure lue plausible).
 - `web_ui/` — génération pure du HTML/JSON du serveur de configuration (pages matériel/plongée/tables), `std::string`, aucune dépendance WiFi. Testé en `native`. Le câblage réel (`WiFi.softAP`, routes `AsyncWebServer`, mutex) vit dans `src/main.cpp`.

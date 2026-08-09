@@ -34,13 +34,26 @@ class Display {
   // comme sur OXY-LD). o2_value_visible=false efface la zone du chiffre O2
   // sans toucher au reste - pilote le clignotement pendant la
   // stabilisation (cf. ARCHITECTURE.md "Retour UI attendu"), decide par
-  // l'appelant (main.cpp), pas par ce module.
+  // l'appelant (main.cpp), pas par ce module. calibrated pilote le badge
+  // "CALIBRE"/"NON CAL" en bas a droite (retour utilisateur : rien
+  // n'indiquait l'etat de calibration sur l'ecran physique).
   void show_measurement(int o2_percent, int mod_meters, float ppo2_setpoint,
-                        RgbColor color, bool stable, bool o2_value_visible);
+                        RgbColor color, bool stable, bool o2_value_visible,
+                        bool calibrated);
 
   // Horloge en haut a gauche (zone 0,0,90,26 - reprise d'OXY-LD). Ne
   // redessine que si l'heure affichee a change (meme cache anti-scintillement).
   void show_clock(int hour, int minute);
+
+  // Affiche un message temporaire (remplace la bande MOD/ppO2 pendant
+  // kCalibrationFeedbackMs) suite a une tentative de calibration MANUELLE
+  // (bouton web /plongee). Retour utilisateur : cliquer "Calibrer" ne
+  // produisait aucun retour visible sur l'ecran physique, impossible de
+  // savoir si la demande avait ete recue (elle est silencieusement
+  // ignoree si la cellule n'est pas stable au moment de l'appui). A
+  // appeler depuis main.cpp des que loop() traite une demande manuelle,
+  // succes ou echec.
+  void notify_calibration_attempt(bool success);
 
  private:
   // scale=1 pour la plupart des textes ; le grand chiffre O2 utilise
@@ -62,4 +75,11 @@ class Display {
   char prev_mod_text_[24] = "";
   char prev_ppo2_text_[16] = "";
   char prev_clock_text_[8] = "";
+  bool prev_cal_badge_shown_ = false;
+  bool prev_cal_badge_calibrated_ = false;
+
+  bool calibration_feedback_active_ = false;
+  bool calibration_feedback_success_ = false;
+  uint32_t calibration_feedback_until_ms_ = 0;
+  bool prev_feedback_shown_ = false;
 };

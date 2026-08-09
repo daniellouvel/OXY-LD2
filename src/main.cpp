@@ -149,7 +149,8 @@ constexpr float kDisplayEmaAlpha = 0.15f;
 
 void show_error(float ppo2) {
   RgbColor c = led_status_for(SystemState::Error).color;
-  display.show_measurement(0, -1, ppo2, c, /*stable=*/false, /*o2_value_visible=*/true);
+  display.show_measurement(0, -1, ppo2, c, /*stable=*/false, /*o2_value_visible=*/true,
+                            calibration.is_calibrated());
 }
 
 // -- Handlers web : lisent/ecrivent uniquement g_state sous mutex, jamais
@@ -354,17 +355,34 @@ void loop() {
   // de tension plausible deja appliquee par calibration.calibrate(). Seule
   // l'auto-calibration est en plus soumise au temps de repos (deja
   // verifie une fois au boot pour l'armement).
-  if ((auto_cal_armed || calibration_requested) && stability.is_stable()) {
-    uint32_t ts = calibration_clock();
-    if (calibration.calibrate(filtered_mv, ts, NAN)) {
-      g_last_calibration_ts = ts;
-      auto_cal_armed = false;
-      save_calibration_to_flash();
-      Serial.printf("Calibration effectuee : %.3f mV (%s)\n", filtered_mv,
-                    calibration_requested ? "manuelle" : "auto");
+  //
+  // Retour visuel (display.notify_calibration_attempt) uniquement pour la
+  // demande MANUELLE (bouton web) - retour utilisateur : cliquer
+  // "Calibrer" ne donnait aucun signe sur l'ecran physique, y compris
+  // quand la demande etait silencieusement rejetee faute de stabilite (le
+  // cas le plus probable de ce qui a ete observe). L'auto-calibration
+  // reste silencieuse a l'ecran (evenement de fond, non initie par un
+  // geste de l'utilisateur devant l'ecran).
+  if (auto_cal_armed || calibration_requested) {
+    if (stability.is_stable()) {
+      uint32_t ts = calibration_clock();
+      if (calibration.calibrate(filtered_mv, ts, NAN)) {
+        g_last_calibration_ts = ts;
+        auto_cal_armed = false;
+        save_calibration_to_flash();
+        Serial.printf("Calibration effectuee : %.3f mV (%s)\n", filtered_mv,
+                      calibration_requested ? "manuelle" : "auto");
+        if (calibration_requested) {
+          display.notify_calibration_attempt(true);
+        }
+      } else if (calibration_requested) {
+        Serial.printf("Calibration manuelle refusee : tension %.3f mV hors plage plausible\n",
+                      filtered_mv);
+        display.notify_calibration_attempt(false);
+      }
     } else if (calibration_requested) {
-      Serial.printf("Calibration manuelle refusee : tension %.3f mV hors plage plausible\n",
-                    filtered_mv);
+      Serial.println("Calibration manuelle refusee : cellule pas encore stable");
+      display.notify_calibration_attempt(false);
     }
   }
 
@@ -403,7 +421,7 @@ void loop() {
   bool o2_visible = stability.is_stable() || ((now / 800) % 2 == 0);
 
   display.show_measurement(o2_display, mod, ppo2_setpoint, led.color, stability.is_stable(),
-                            o2_visible);
+                            o2_visible, calibration.is_calibrated());
 
   if (xSemaphoreTake(g_mutex, kMutexTimeout) == pdTRUE) {
     g_state.o2_percent = o2_display;

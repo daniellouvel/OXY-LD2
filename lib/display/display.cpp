@@ -16,6 +16,10 @@ constexpr int8_t kPinRst = 14;
 
 // Dimensions apres setRotation(1) (paysage) - reprises d'OXY-LD (TFT_W/TFT_H).
 constexpr int16_t kScreenW = 320;
+
+// Duree d'affichage du message temporaire de resultat de calibration
+// manuelle - cf. notify_calibration_attempt().
+constexpr uint32_t kCalibrationFeedbackMs = 3000;
 }  // namespace
 
 Display::Display() : spi_(), tft_(&spi_, kPinCs, kPinDc, kPinRst) {}
@@ -68,8 +72,15 @@ void Display::show_splash() {
   force_redraw_ = true;
 }
 
+void Display::notify_calibration_attempt(bool success) {
+  calibration_feedback_active_ = true;
+  calibration_feedback_success_ = success;
+  calibration_feedback_until_ms_ = millis() + kCalibrationFeedbackMs;
+}
+
 void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoint,
-                                RgbColor color, bool stable, bool o2_value_visible) {
+                                RgbColor color, bool stable, bool o2_value_visible,
+                                bool calibrated) {
   const bool force = force_redraw_;
   force_redraw_ = false;
 
@@ -128,23 +139,76 @@ void Display::show_measurement(int o2_percent, int mod_meters, float ppo2_setpoi
     tft_.setFont(nullptr);
   }
 
-  // -- Bande basse : MOD + ppO2 --
-  char mod_text[24];
-  if (mod_meters >= 0) {
-    std::snprintf(mod_text, sizeof(mod_text), "MOD %d m", mod_meters);
-  } else {
-    std::snprintf(mod_text, sizeof(mod_text), "MOD --");
+  // -- Bande basse : MOD + ppO2, ou message temporaire de calibration --
+  //
+  // Hauteur reduite (80 -> 58, s'arrete a y=208) pour laisser la place au
+  // badge de calibration en bas a droite (zone 200,208,120,30) ajoute
+  // ci-dessous - les deux zones ne doivent plus se chevaucher pour que
+  // leurs caches anti-scintillement respectifs restent independants.
+  bool feedback_now =
+      calibration_feedback_active_ && millis() < calibration_feedback_until_ms_;
+  if (calibration_feedback_active_ && !feedback_now) {
+    // Le message vient d'expirer - force le retour a MOD/ppO2 au prochain
+    // passage (cache invalide, sinon la valeur inchangee ne serait jamais
+    // redessinee par-dessus le message qui vient de s'effacer).
+    calibration_feedback_active_ = false;
+    prev_mod_text_[0] = '\0';
+    prev_ppo2_text_[0] = '\0';
   }
-  char ppo2_text[16];
-  std::snprintf(ppo2_text, sizeof(ppo2_text), "ppO2 %.1f", static_cast<double>(ppo2_setpoint));
 
-  if (force || std::strcmp(mod_text, prev_mod_text_) != 0 ||
-      std::strcmp(ppo2_text, prev_ppo2_text_) != 0) {
-    std::strcpy(prev_mod_text_, mod_text);
-    std::strcpy(prev_ppo2_text_, ppo2_text);
-    tft_.fillRect(0, 150, kScreenW, 80, ST77XX_BLACK);
-    center_text(mod_text, 165, &FreeSansBold12pt7b, ST77XX_WHITE);
-    center_text(ppo2_text, 200, &FreeSansBold9pt7b, ST77XX_WHITE);
+  if (feedback_now) {
+    if (force || !prev_feedback_shown_) {
+      prev_feedback_shown_ = true;
+      tft_.fillRect(0, 150, kScreenW, 58, ST77XX_BLACK);
+      uint16_t col = calibration_feedback_success_ ? ST77XX_GREEN
+                                                     : tft_.color565(230, 40, 40);
+      const char* msg =
+          calibration_feedback_success_ ? "CALIBRATION OK" : "CALIBRATION ECHEC";
+      center_text(msg, 180, &FreeSansBold12pt7b, col);
+    }
+  } else {
+    prev_feedback_shown_ = false;
+    char mod_text[24];
+    if (mod_meters >= 0) {
+      std::snprintf(mod_text, sizeof(mod_text), "MOD %d m", mod_meters);
+    } else {
+      std::snprintf(mod_text, sizeof(mod_text), "MOD --");
+    }
+    char ppo2_text[16];
+    std::snprintf(ppo2_text, sizeof(ppo2_text), "ppO2 %.1f", static_cast<double>(ppo2_setpoint));
+
+    if (force || std::strcmp(mod_text, prev_mod_text_) != 0 ||
+        std::strcmp(ppo2_text, prev_ppo2_text_) != 0) {
+      std::strcpy(prev_mod_text_, mod_text);
+      std::strcpy(prev_ppo2_text_, ppo2_text);
+      tft_.fillRect(0, 150, kScreenW, 58, ST77XX_BLACK);
+      center_text(mod_text, 165, &FreeSansBold12pt7b, ST77XX_WHITE);
+      center_text(ppo2_text, 200, &FreeSansBold9pt7b, ST77XX_WHITE);
+    }
+  }
+
+  // -- Badge calibration (bas-droit) -- persistant, independant du
+  // clignotement et du message temporaire ci-dessus. Retour utilisateur :
+  // rien n'indiquait l'etat de calibration sur l'ecran physique (seul un
+  // "0%" rouge le laissait deviner indirectement via l'etat d'erreur).
+  if (force || calibrated != prev_cal_badge_calibrated_ || !prev_cal_badge_shown_) {
+    prev_cal_badge_shown_ = true;
+    prev_cal_badge_calibrated_ = calibrated;
+    constexpr int16_t cx = 200, cy = 208, cw = 120, ch = 30;
+    tft_.fillRect(cx, cy, cw, ch, ST77XX_BLACK);
+    uint16_t cal_col = calibrated ? ST77XX_GREEN : ST77XX_RED;
+    tft_.fillRoundRect(cx + 2, cy + 2, cw - 4, ch - 4, 5, cal_col);
+    const char* txt = calibrated ? "CALIBRE" : "NON CAL";
+    tft_.setFont(&FreeSansBold9pt7b);
+    tft_.setTextSize(1);
+    int16_t cx1, cy1;
+    uint16_t cw1, ch1;
+    tft_.getTextBounds(txt, 0, 0, &cx1, &cy1, &cw1, &ch1);
+    tft_.setTextColor(ST77XX_BLACK);
+    tft_.setCursor(cx + (cw - static_cast<int16_t>(cw1)) / 2 - cx1,
+                   cy + (ch - static_cast<int16_t>(ch1)) / 2 - cy1);
+    tft_.print(txt);
+    tft_.setFont(nullptr);
   }
 }
 
